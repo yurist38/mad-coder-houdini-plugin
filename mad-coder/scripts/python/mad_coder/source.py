@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any
+from typing import Any, Protocol
 
 
 class SourceConflictError(RuntimeError):
@@ -13,6 +13,22 @@ class SourceConflictError(RuntimeError):
 
 class SourceUnavailableError(RuntimeError):
     """Raised when a node, parameter, definition, or section no longer exists."""
+
+
+class SourceAdapter(Protocol):
+    """Interface shared by editable Houdini Python source adapters."""
+
+    display_name: str
+    lint_filename: str
+    placeholder: str
+    save_warning: str
+    source_key: str
+
+    def load(self) -> str: ...
+
+    def save(self, text: str, expected: str | None) -> None: ...
+
+    def read_only_reason(self) -> str | None: ...
 
 
 def _hou_module(hou_module: Any | None) -> Any:
@@ -172,11 +188,11 @@ class HDASectionSource:
         return None
 
 
-def python_sources_for_node(node: Any, hou_module: Any | None = None) -> list[Any]:
+def python_sources_for_node(node: Any, hou_module: Any | None = None) -> list[SourceAdapter]:
     """Discover supported Python sources for a selected Houdini node."""
 
     hou_module = _hou_module(hou_module)
-    sources: list[Any] = []
+    sources: list[SourceAdapter] = []
     node_path = str(node.path())
     type_name = str(node.type().name()).lower()
 

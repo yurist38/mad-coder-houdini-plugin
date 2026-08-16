@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import hou  # type: ignore[import-not-found]
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .diagnostics import Diagnostic
 from .editor import MadCoderEditor
 from .linting import RuffService
-from .source import SessionSource, SourceConflictError, python_sources_for_node
+from .source import SourceAdapter, SessionSource, SourceConflictError, python_sources_for_node
 
 
 class MadCoderPanel(QtWidgets.QWidget):
@@ -140,7 +142,7 @@ class MadCoderPanel(QtWidgets.QWidget):
                 return item
         return None
 
-    def _sources_for_selection(self, selection: list[object] | None = None) -> list[object]:
+    def _sources_for_selection(self, selection: list[object] | None = None) -> list[SourceAdapter]:
         node = self._selected_node(selection)
         if node is None:
             return []
@@ -180,7 +182,7 @@ class MadCoderPanel(QtWidgets.QWidget):
         elif not self._baseline and not self.editor.toPlainText():
             self.reload(force=True)
 
-    def _rebuild_source_selector(self, sources: list[object], selected_key: str) -> None:
+    def _rebuild_source_selector(self, sources: list[SourceAdapter], selected_key: str) -> None:
         self._updating_sources = True
         try:
             self._source_selector.clear()
@@ -208,7 +210,7 @@ class MadCoderPanel(QtWidgets.QWidget):
     def _source_selected(self, index: int) -> None:
         if self._updating_sources or index < 0:
             return
-        source = self._source_selector.itemData(index)
+        source = cast(SourceAdapter | None, self._source_selector.itemData(index))
         if source is None or source.source_key == self._source.source_key:
             return
         if not self._switch_source(source, confirm=True):
@@ -218,14 +220,14 @@ class MadCoderPanel(QtWidgets.QWidget):
         self._updating_sources = True
         try:
             for index in range(self._source_selector.count()):
-                source = self._source_selector.itemData(index)
+                source = cast(SourceAdapter | None, self._source_selector.itemData(index))
                 if source is not None and source.source_key == source_key:
                     self._source_selector.setCurrentIndex(index)
                     break
         finally:
             self._updating_sources = False
 
-    def _switch_source(self, source: object, *, confirm: bool) -> bool:
+    def _switch_source(self, source: SourceAdapter, *, confirm: bool) -> bool:
         if confirm and self._is_dirty():
             answer = QtWidgets.QMessageBox.question(
                 self,
@@ -420,7 +422,7 @@ class MadCoderPanel(QtWidgets.QWidget):
         if isinstance(diagnostic, Diagnostic):
             self.editor.go_to(diagnostic.line, diagnostic.column)
 
-def scene_changed(self) -> None:
+    def scene_changed(self) -> None:
         if self._is_dirty():
             answer = QtWidgets.QMessageBox.question(
                 self,
