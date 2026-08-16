@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing release tag to build and publish
+        required: false
+        type: string
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install checks
+        run: python -m pip install ruff==0.16.0
+      - name: Validate release source
+        run: |
+          python -m compileall -q mad-coder/scripts/python scripts tests
+          python -m unittest discover -s tests -v
+          ruff check mad-coder/scripts/python scripts tests
+
+  build:
+    needs: validate
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux-x64
+          - os: windows-2022
+            platform: windows-x64
+          - os: macos-14
+            platform: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pinned Ruff
+        run: python -m pip install ruff==0.16.0
+      - name: Build release archive
+        run: python scripts/build_release.py --version "${RELEASE_TAG}" --platform "${{ matrix.platform }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: dist/*.zip
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum dist/*.zip > dist/SHA256SUMS.txt
+          gh release create "${RELEASE_TAG}" dist/*.zip dist/SHA256SUMS.txt --verify-tag --generate-notes --title "Mad Coder ${RELEASE_TAG}"

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pythonPanelDocument>
+  <interface name="mad_coder" label="Mad Coder" icon="MISC_python" showNetworkNavigationBar="false" help_url="">
+    <script><![CDATA[from mad_coder.panel import MadCoderPanel
+
+_panel = None
+
+def onCreateInterface():
+    global _panel
+    _panel = MadCoderPanel()
+    return _panel
+
+def onDestroyInterface():
+    global _panel
+    if _panel is not None:
+        _panel.shutdown()
+        _panel = None
+
+def onHipFileAfterLoad():
+    if _panel is not None:
+        _panel.scene_changed()
+
+def onHipFileAfterClear():
+    if _panel is not None:
+        _panel.scene_changed()
+]]></script>
+    <includeInToolbarMenu menu_position="210" create_separator="false"/>
+    <help><![CDATA[Mad Coder is a dockable Python editor for hou.session with Ruff linting and formatting.]]></help>
+  </interface>
+</pythonPanelDocument>

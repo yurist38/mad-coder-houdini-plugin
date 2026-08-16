@@ -1,0 +1,6 @@
+{
+  "enable": "houdini_version >= '21.0'",
+  "show": true,
+  "load_package_once": true,
+  "hpath": "$HOUDINI_PACKAGE_PATH/../mad-coder"
+}
