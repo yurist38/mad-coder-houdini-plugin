@@ -10,7 +10,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from .diagnostics import Diagnostic
 from .editor import MadCoderEditor
 from .linting import RuffService
-from .source import SourceAdapter, SessionSource, SourceConflictError, python_sources_for_node
+from .source import SessionSource, SourceAdapter, SourceConflictError, python_sources_for_node
 
 
 class MadCoderPanel(QtWidgets.QWidget):
