@@ -188,13 +188,18 @@ class RuffService(QtCore.QObject):
 
     def _process_error(self, process: QtCore.QProcess, generation: int, mode: str) -> None:
         if mode == "lint" and generation != self._lint_generation:
+            process.deleteLater()
             return
         message = process.errorString() or f"Could not start Ruff {mode} process"
         if mode == "lint":
+            if process is self._lint_process:
+                self._lint_process = None
             self.lint_failed.emit(message)
         else:
+            if process is self._format_process:
+                self._format_process = None
             self.format_failed.emit(message)
-
+        process.deleteLater()
     def shutdown(self) -> None:
         for process in (self._lint_process, self._format_process):
             if process is not None and process.state() != QtCore.QProcess.ProcessState.NotRunning:
