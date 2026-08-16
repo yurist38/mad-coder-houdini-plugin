@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install checks
+        run: python -m pip install ruff==0.16.0
+      - name: Compile Python sources
+        run: python -m compileall -q mad-coder/scripts/python scripts tests
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Run Ruff
+        run: ruff check mad-coder/scripts/python scripts tests
