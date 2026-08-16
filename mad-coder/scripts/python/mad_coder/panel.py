@@ -159,9 +159,8 @@ class MadCoderPanel(QtWidgets.QWidget):
         box.setInformativeText(
             "Reload the external version or overwrite it with this editor's text?"
         )
-        reload_button = box.addButton("Reload", QtWidgets.QMessageBox.ButtonRole.DestructiveRole)
-        overwrite_button = box.addButton("Overwrite", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
-        box.addButton(QtWidgets.QMessageBox.StandardButton.Cancel)
+        reload_button = box.addButton("Reload", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+        overwrite_button = box.addButton("Overwrite", QtWidgets.QMessageBox.ButtonRole.DestructiveRole)
         box.exec()
         if box.clickedButton() is reload_button:
             self.reload(force=True)
