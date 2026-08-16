@@ -420,9 +420,21 @@ def _update_source_title(self) -> None:
         if isinstance(diagnostic, Diagnostic):
             self.editor.go_to(diagnostic.line, diagnostic.column)
 
-    def scene_changed(self) -> None:
+def scene_changed(self) -> None:
+        if self._is_dirty():
+            answer = QtWidgets.QMessageBox.question(
+                self,
+                "Discard unsaved changes?",
+                "The scene changed. Reloading will discard the changes in this editor.",
+                QtWidgets.QMessageBox.StandardButton.Discard
+                | QtWidgets.QMessageBox.StandardButton.Cancel,
+                QtWidgets.QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QtWidgets.QMessageBox.StandardButton.Discard:
+                self._refresh_sources(follow=self._follow_selection.isChecked())
+                return
+
         self._source = SessionSource(self._hou)
-        self._baseline = self.editor.toPlainText()
         self.reload(force=True)
         self._refresh_sources(follow=self._follow_selection.isChecked())
 
