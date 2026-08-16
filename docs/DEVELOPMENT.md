@@ -92,6 +92,10 @@ from strict `vMAJOR.MINOR.PATCH` tags, creates an annotated tag, pushes it, and 
 release workflow. Prerelease and unrelated tags are ignored. Concurrent manual releases are
 serialized to prevent two runs from selecting the same version.
 
+If publishing fails after a tag has already been created, merge the workflow fix and open
+**Actions → Release → Run workflow**. Enter the existing tag, such as `v0.1.0`. This rebuilds the
+tagged source and retries publication without creating or moving a tag.
+
 ### Command-line release
 
 1. Update `__version__`, `pyproject.toml`, documentation, and the changelog together.
