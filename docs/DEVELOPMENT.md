@@ -103,8 +103,8 @@ serialized to prevent two runs from selecting the same version.
    generated notes and SHA-256 checksums.
 6. Download and inspect all three published archives.
 
-The CI workflow tests the minimum Python 3.11 runtime and Houdini 22's Python 3.13 runtime on every
-pull request and push to `master` or `main`.
+The CI workflow tests the minimum Python 3.11 runtime on every pull request and push to `master` or
+`main`.
 
 ## Versioning policy
 
