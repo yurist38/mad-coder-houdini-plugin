@@ -42,6 +42,7 @@ Source adapters expose the same conceptual contract:
 - Synthetic filename for linting
 - Stable source key
 - Placeholder and save warning
+- Houdini globals available to the linter in that execution context
 - `load() -> str`
 - `save(text, expected)` with conflict detection
 - `read_only_reason()`
@@ -56,9 +57,12 @@ Ruff is an external executable rather than an imported extension module. This av
 Houdini's Python 3.11 and newer builds and keeps the UI package pure Python. Release archives are
 therefore platform-specific even though the plugin source is shared.
 
-Linting uses a fixed conservative rule set and isolated mode. A future settings UI can expose rules
-or configuration files, but it should preserve deterministic defaults and report the active
-configuration clearly.
+Linting uses a fixed conservative rule set and isolated mode. Each source adapter supplies a small
+tuple of documented context globals, such as `hou` or `kwargs`. `RuffService` passes them through a
+per-run `builtins` override, so no prelude is inserted and diagnostic positions remain aligned with
+the editor. The contexts deliberately remain source-specific to avoid hiding genuine undefined
+names. A future settings UI can expose rules or configuration files, but it should preserve
+deterministic defaults and report the active configuration clearly.
 
 ## Failure behavior
 

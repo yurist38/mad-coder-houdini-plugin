@@ -390,7 +390,11 @@ class MadCoderPanel(QtWidgets.QWidget):
         self._set_status(f"Format failed: {message}", error=True)
 
     def _run_lint(self) -> None:
-        self._ruff.lint(self.editor.toPlainText(), self._source.lint_filename)
+        self._ruff.lint(
+            self.editor.toPlainText(),
+            self._source.lint_filename,
+            self._source.lint_builtins,
+        )
 
     def _lint_ready(self, diagnostics: list[Diagnostic], engine: str) -> None:
         self._diagnostics = diagnostics

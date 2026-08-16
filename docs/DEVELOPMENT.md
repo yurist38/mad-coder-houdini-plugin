@@ -57,9 +57,11 @@ Before releasing:
 5. Correct the source, save it, and confirm the new member is available from the Python Shell.
 6. Modify `hou.session` through the native source editor and verify conflict handling.
 7. Create and select a Python SOP. Confirm its code opens, saves, cooks, and participates in
-   Houdini undo.
+   Houdini undo. Confirm `hou.pwd()` does not produce an `F821` diagnostic while a genuinely
+   undefined name still does.
 8. Select an HDA with a `PythonModule`. Choose it in the source selector, save a harmless change,
-   and confirm the definition change is visible from another instance.
+   and confirm the definition change is visible from another instance. Confirm both `hou` and
+   `kwargs` are accepted as context globals.
 9. Make a buffer dirty, change node selection, and confirm Mad Coder does not discard the buffer.
 10. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
 11. Open a source in a non-writable HDA library and confirm it is view-only.

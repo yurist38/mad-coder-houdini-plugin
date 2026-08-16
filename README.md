@@ -62,6 +62,20 @@ Linux ARM are outside the initial support scope.
 
 Houdini's package system loads the plugin; `houdini.env` does not need to be edited.
 
+### macOS security prompt
+
+macOS may quarantine the bundled Ruff executable and prevent linting from starting, or repeatedly
+delay the editor while checking the executable. After installing a trusted Mad Coder release, close
+Houdini and run this command in Terminal:
+
+```shell
+xattr -dr com.apple.quarantine "$HOME/Library/Preferences/houdini/22.0/mad-coder"
+```
+
+Replace `22.0` with the Houdini preferences version you installed the plugin into, such as `21.0`,
+then restart Houdini. Only remove quarantine metadata from a release you downloaded from a source
+you trust.
+
 ### Upgrade
 
 Close Houdini, replace the existing `mad-coder` directory with the directory from the new release,
@@ -143,6 +157,11 @@ process with Python 3.11 syntax compatibility and the core `E4`, `E7`, `E9`, and
 This catches import, name, syntax, and common Python correctness problems without presenting the
 hundreds of style rules enabled by Ruff 0.16's expanded defaults.
 
+Mad Coder supplies Ruff with the documented globals for the active Houdini source context. It
+recognizes `hou` in scene and Python SOP code, and recognizes both `hou` and `kwargs` in Python
+Snippet SOP and HDA `PythonModule` code. These names are configured only for linting; Mad Coder does
+not insert imports or alter the saved source.
+
 Ruff runs in isolated mode, so an unrelated `pyproject.toml` in Houdini's working directory cannot
 silently change the editor's rules. If Ruff cannot be found, the panel remains usable and reports
 Python syntax errors using the standard library parser; formatting is disabled.
@@ -187,6 +206,8 @@ inside Houdini's native editor.
 - Node discovery currently recognizes common Python code parameter names and HDA
   `PythonModule`; HDA event-handler sections are not yet included.
 - There is no code completion, type checking, refactoring, or language-server integration yet.
+- Context globals are recognized as defined names, but Ruff does not validate Houdini API member
+  names or infer HOM return types.
 - Ruff fixes are shown as fixable diagnostics but are not individually applied; Format formats the
   complete buffer.
 - The syntax highlighter is intentionally lightweight and is not a full Python parser.

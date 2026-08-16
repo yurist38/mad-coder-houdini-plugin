@@ -134,6 +134,9 @@ class FakeHou:
 
 
 class SessionSourceTests(unittest.TestCase):
+    def test_exposes_houdini_lint_context(self) -> None:
+        self.assertEqual(SessionSource(FakeHou()).lint_builtins, ("hou",))
+
     def test_loads_and_saves(self) -> None:
         hou = FakeHou("answer = 41\n")
         source = SessionSource(hou)
@@ -172,6 +175,9 @@ class NodeParameterSourceTests(unittest.TestCase):
         self.assertEqual(self.source.load(), "answer = 42\n")
         self.assertEqual(self.hou.undos.labels, ["Mad Coder: /obj/python1/python"])
 
+    def test_exposes_python_sop_lint_context(self) -> None:
+        self.assertEqual(self.source.lint_builtins, ("hou",))
+
     def test_detects_external_change(self) -> None:
         self.parm.source = "external = True\n"
 
@@ -204,6 +210,9 @@ class HDASectionSourceTests(unittest.TestCase):
         self.source.save(updated, expected=self.section.source)
 
         self.assertEqual(self.source.load(), updated)
+
+    def test_exposes_hda_lint_context(self) -> None:
+        self.assertEqual(self.source.lint_builtins, ("hou", "kwargs"))
 
     def test_detects_external_change(self) -> None:
         expected = self.section.source
@@ -239,6 +248,19 @@ class SourceDiscoveryTests(unittest.TestCase):
         )
         self.assertEqual(sources[0].source_key, "parm:/obj/python1:python")
         self.assertEqual(sources[1].source_key, "hda:/obj/python1:PythonModule")
+
+    def test_python_snippet_exposes_kwargs(self) -> None:
+        node = FakeNode(
+            "/obj/python_snippet1",
+            FakeNodeType("python_snippet"),
+            {"python": FakeParm("return kwargs['geo']\n")},
+        )
+        hou = FakeHou(nodes=[node])
+
+        sources = python_sources_for_node(node, hou)
+
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0].lint_builtins, ("hou", "kwargs"))
 
 
 if __name__ == "__main__":

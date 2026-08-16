@@ -10,6 +10,7 @@ from pathlib import Path
 from PySide6 import QtCore
 
 from .diagnostics import Diagnostic, parse_ruff_output
+from .ruff_config import check_arguments
 
 
 def find_ruff() -> str | None:
@@ -70,7 +71,7 @@ class RuffService(QtCore.QObject):
     def available(self) -> bool:
         return self.executable is not None
 
-    def lint(self, text: str, filename: str) -> None:
+    def lint(self, text: str, filename: str, builtins: tuple[str, ...] = ()) -> None:
         self._lint_generation += 1
         generation = self._lint_generation
 
@@ -92,22 +93,7 @@ class RuffService(QtCore.QObject):
         process.errorOccurred.connect(
             lambda _error, p=process, g=generation: self._process_error(p, g, "lint")
         )
-        process.start(
-            self.executable,
-            [
-                "check",
-                "--isolated",
-                "--output-format",
-                "json",
-                "--select",
-                "E4,E7,E9,F",
-                "--target-version",
-                "py311",
-                "--stdin-filename",
-                filename,
-                "-",
-            ],
-        )
+        process.start(self.executable, check_arguments(filename, builtins))
 
     def format(self, text: str, filename: str) -> None:
         if not self.executable:
@@ -200,6 +186,7 @@ class RuffService(QtCore.QObject):
                 self._format_process = None
             self.format_failed.emit(message)
         process.deleteLater()
+
     def shutdown(self) -> None:
         for process in (self._lint_process, self._format_process):
             if process is not None and process.state() != QtCore.QProcess.ProcessState.NotRunning:
