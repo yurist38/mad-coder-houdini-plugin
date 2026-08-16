@@ -1,8 +1,9 @@
 # Mad Coder
 
 Mad Coder is a dockable Python editor for SideFX Houdini with live Ruff diagnostics and formatting.
-The initial release edits the current scene's `hou.session` module—the same source exposed by
-Houdini's native Python Source Editor—without modifying Houdini's internal editor widgets.
+It edits the current scene's `hou.session` module, Python code parameters on selected nodes, and
+the `PythonModule` section of selected Houdini digital assets without modifying Houdini's internal
+editor widgets.
 
 ## Features
 
@@ -14,11 +15,13 @@ Houdini's native Python Source Editor—without modifying Houdini's internal edi
 - Ruff formatting
 - Save and reload shortcuts
 - Protection against overwriting changes made through another editor
+- Follow Selection mode for opening supported code from the selected node
+- View-only handling for locked parameters and non-writable asset libraries
 - Syntax-error diagnostics when Ruff is unavailable
 
 ## Compatibility
 
-Version 0.1 targets **Houdini 21.0 and newer**, using Qt 6/PySide6:
+It targets **Houdini 21.0 and newer**, using Qt 6/PySide6:
 
 | Platform | Supported release archive |
 | --- | --- |
@@ -30,7 +33,7 @@ Python 3.11 is the minimum supported interpreter. This covers Houdini 21's main 
 Houdini 22's Python 3.11 and 3.13 builds. Qt 5 builds, Houdini 20.5 and older, Intel macOS, and
 Linux ARM are outside the initial support scope.
 
-## Install a release
+## How to install the plugin
 
 1. Download the ZIP matching your operating system from the GitHub Releases page.
 2. In Houdini, open **Windows → Python Shell** and evaluate:
@@ -82,8 +85,23 @@ Then restart Houdini. Uninstalling does not alter Python source already saved in
 2. In the Python Panel interface menu, select **Mad Coder**.
 3. Dock the pane and save the desktop layout if desired.
 
-The top-left label identifies the source as **Scene · hou.session**. An asterisk means the editor
+The source selector identifies what the editor is currently showing. An asterisk means the editor
 contains unsaved changes.
+
+### Open code from a node
+
+1. Leave **Follow Selection** enabled.
+2. Select a Python node, such as a Python SOP, in a network editor.
+3. Mad Coder opens the node's supported Python parameter automatically.
+4. If the node is a digital asset with a `PythonModule` section, choose that section from the
+   source selector when you want to edit the asset module instead.
+
+The last selected node is used when multiple nodes are selected. **Use Selected** performs the same
+lookup on demand, which is useful when Follow Selection is disabled. The source selector always
+includes **Scene · hou.session**, so you can return to scene-level code at any time.
+
+Mad Coder does not discard an unsaved buffer when selection changes. Save or reload first, then
+select the node again or click **Use Selected**.
 
 ### Editing workflow
 
@@ -91,15 +109,19 @@ contains unsaved changes.
 - Hover over an underlined range to read its diagnostic.
 - Click a row in **Problems** to jump to its location.
 - Select **Format** to apply Ruff formatting to the editor buffer.
-- Select **Save** to apply the buffer to `hou.session` and store it with the scene on the next
-  `.hip` save.
-- Select **Reload** to discard the buffer and read the current `hou.session` source again.
+- Select **Save** to apply the buffer to its current Houdini source.
+- Select **Reload** to discard the buffer and read the current source again.
 
-Saving calls Houdini's `hou.setSessionModuleSource`. Houdini makes the new module contents
-available immediately, so top-level code executes as part of applying the source. Treat scripts
-from untrusted scene files as executable code.
+Node-parameter changes are grouped as a Houdini undo operation. Saving a `PythonModule` changes
+the digital asset definition and therefore affects every instance of that asset. Asset definitions
+in non-writable libraries and locked node parameters are opened view-only.
 
-If `hou.session` changed elsewhere after this panel loaded it, Save offers three choices:
+Saving `hou.session` calls Houdini's `hou.setSessionModuleSource`. Houdini makes the new module
+contents available immediately, so top-level code executes as part of applying the source. Changing
+node or asset code may also trigger cooks or callbacks. Treat scripts from untrusted scene and asset
+files as executable code.
+
+If the current source changed elsewhere after this panel loaded it, Save offers three choices:
 
 - **Reload**: discard this panel's buffer and load the external source.
 - **Overwrite**: deliberately replace the external source.
@@ -151,9 +173,8 @@ executable bit was preserved. An explicit `MAD_CODER_RUFF` path can override it.
 
 ### Save fails
 
-Houdini rejects session-module source containing syntax errors. Select the first syntax diagnostic,
-correct it, and save again. Runtime errors from top-level code can also be reported while Houdini
-applies the source.
+Read the status line for the error reported by Houdini. Correct any syntax diagnostic and save
+again. Runtime errors can also be reported while Houdini applies or evaluates code.
 
 ### The native Python Source Editor and this panel disagree
 
@@ -163,14 +184,15 @@ inside Houdini's native editor.
 
 ## Current limitations
 
-- Only `hou.session` is editable in version 0.1.
+- Node discovery currently recognizes common Python code parameter names and HDA
+  `PythonModule`; HDA event-handler sections are not yet included.
 - There is no code completion, type checking, refactoring, or language-server integration yet.
 - Ruff fixes are shown as fixable diagnostics but are not individually applied; Format formats the
   complete buffer.
 - The syntax highlighter is intentionally lightweight and is not a full Python parser.
 
-HDA Python modules, HDA event handlers, Python node parameters, external files, quick fixes, and
-language-server support are natural follow-up milestones.
+HDA event handlers, external files, quick fixes, and language-server support are natural follow-up
+milestones.
 
 ## Develop and release
 

@@ -56,9 +56,16 @@ Before releasing:
 4. Enter invalid syntax and confirm that it appears inline and in Problems.
 5. Correct the source, save it, and confirm the new member is available from the Python Shell.
 6. Modify `hou.session` through the native source editor and verify conflict handling.
-7. Format deliberately irregular code and verify the cursor remains near its original position.
-8. Load and clear scenes while the panel is open and verify the source refreshes.
-9. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
+7. Create and select a Python SOP. Confirm its code opens, saves, cooks, and participates in
+   Houdini undo.
+8. Select an HDA with a `PythonModule`. Choose it in the source selector, save a harmless change,
+   and confirm the definition change is visible from another instance.
+9. Make a buffer dirty, change node selection, and confirm Mad Coder does not discard the buffer.
+10. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
+11. Open a source in a non-writable HDA library and confirm it is view-only.
+12. Format deliberately irregular code and verify the cursor remains near its original position.
+13. Load and clear scenes while the panel is open and verify source discovery refreshes.
+14. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
    release.
 
 ## Build a release archive locally
