@@ -272,7 +272,7 @@ class MadCoderPanel(QtWidgets.QWidget):
             return self._source.save_warning, False
         return "", False
 
-def _update_source_title(self) -> None:
+    def _update_source_title(self) -> None:
         dirty_key = self._source.source_key if self._is_dirty() else None
         for index in range(self._source_selector.count()):
             source = self._source_selector.itemData(index)
