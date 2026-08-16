@@ -89,9 +89,10 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
                     str(block_number + 1),
                 )
             block = block.next()
+            if not block.isValid():
+                break
             top = bottom
             bottom = top + round(self.blockBoundingRect(block).height())
-            block_number += 1
 
     def set_diagnostics(self, diagnostics: list[Diagnostic]) -> None:
         self._diagnostics = diagnostics
