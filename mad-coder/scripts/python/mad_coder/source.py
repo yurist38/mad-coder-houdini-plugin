@@ -19,6 +19,7 @@ class SourceAdapter(Protocol):
     """Interface shared by editable Houdini Python source adapters."""
 
     display_name: str
+    lint_builtins: tuple[str, ...]
     lint_filename: str
     placeholder: str
     save_warning: str
@@ -48,6 +49,7 @@ class SessionSource:
     """Read and write the scene-local ``hou.session`` module."""
 
     display_name = "Scene · hou.session"
+    lint_builtins = ("hou",)
     lint_filename = "hou_session.py"
     placeholder = "# Python stored in hou.session"
     save_warning = ""
@@ -82,6 +84,7 @@ class NodeParameterSource:
         self.lint_filename = _filename(f"{node_path}_{parm_name}")
         self.placeholder = f"# Python stored in {node_path}/{parm_name}"
         self.source_key = f"parm:{node_path}:{parm_name}"
+        self.lint_builtins = ("hou",)
 
     def _resolve_node(self) -> Any:
         node = self._hou.node(self.node_path)
@@ -143,6 +146,7 @@ class HDASectionSource:
         node = self._resolve_node()
         type_name = node.type().name()
         self.display_name = f"Asset · {type_name} · {section_name}"
+        self.lint_builtins = ("hou", "kwargs")
         self.lint_filename = _filename(f"{type_name}_{section_name}")
         self.placeholder = f"# {section_name} for {type_name}"
         self.save_warning = (
@@ -195,6 +199,7 @@ def python_sources_for_node(node: Any, hou_module: Any | None = None) -> list[So
     sources: list[SourceAdapter] = []
     node_path = str(node.path())
     type_name = str(node.type().name()).lower()
+    normalized_type_name = re.sub(r"[^a-z0-9]+", "", type_name)
 
     candidates = ["python", "pythoncode", "pythonscript"]
     if "python" in type_name:
@@ -212,7 +217,10 @@ def python_sources_for_node(node: Any, hou_module: Any | None = None) -> list[So
             parm.unexpandedString()
         except Exception:
             continue
-        sources.append(NodeParameterSource(node_path, parm_name, hou_module))
+        source = NodeParameterSource(node_path, parm_name, hou_module)
+        if "pythonsnippet" in normalized_type_name:
+            source.lint_builtins = ("hou", "kwargs")
+        sources.append(source)
 
     try:
         definition = node.type().definition()
