@@ -10,7 +10,10 @@ Python modules from `scripts/python`, another standard Houdini search location.
 Houdini package JSON
   → Python Panel definition
     → MadCoderPanel
-      ├── SessionSource → hou.sessionModuleSource / hou.setSessionModuleSource
+      ├── Source adapters
+      │   ├── SessionSource → hou.session
+      │   ├── NodeParameterSource → selected-node string parameters
+      │   └── HDASectionSource → asset PythonModule sections
       ├── MadCoderEditor → text editing, line numbers, inline diagnostic rendering
       ├── PythonHighlighter → dependency-free token highlighting
       └── RuffService → asynchronous lint and format subprocesses
@@ -24,24 +27,28 @@ through Qt signals. Starting a new lint pass invalidates or terminates the prece
 
 ## Source consistency
 
-`SessionSource` records no hidden global state. The panel keeps the exact source string it loaded as
-its baseline and supplies that value on save. The adapter reads the current Houdini value immediately
-before writing; a mismatch raises `SourceConflictError`. Explicit overwrite passes no expected value.
+Source adapters record no hidden source snapshot. The panel keeps the exact string it loaded as its
+baseline and supplies that value on save. Each adapter reads the current Houdini value immediately
+before writing; a mismatch raises `SourceConflictError`. Explicit overwrite passes no expected
+value.
 
 This optimistic-concurrency boundary should be retained for every future source adapter.
 
 ## Adding source types
 
-Future source adapters should expose the same conceptual contract:
+Source adapters expose the same conceptual contract:
 
 - Human-readable display name
 - Synthetic filename for linting
+- Stable source key
+- Placeholder and save warning
 - `load() -> str`
 - `save(text, expected)` with conflict detection
+- `read_only_reason()`
 
-Likely adapters include HDA `PythonModule` sections, HDA event-handler sections, string parameters
-containing Python, and external files. The panel should switch adapters only after resolving an
-unsaved buffer.
+`python_sources_for_node` currently discovers common Python parameter names and an HDA
+`PythonModule` section. Likely future adapters include HDA event-handler sections and external
+files. The panel never switches adapters while the current buffer has unsaved changes.
 
 ## Linter boundary
 
@@ -59,4 +66,6 @@ configuration clearly.
 - Ruff process failure: the editor stays usable and displays the process error in its status area.
 - Invalid Python on save: Houdini rejects it and the buffer remains unsaved.
 - External source modification: the user chooses reload, overwrite, or cancel.
-- Scene load/clear: Python Panel lifecycle hooks reload the new scene's session module.
+- Locked or non-writable source: the source remains available in view-only mode.
+- Selection change: a Houdini selection callback refreshes the source selector on the UI thread.
+- Scene load/clear: Python Panel lifecycle hooks reset source discovery for the new scene.
