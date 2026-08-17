@@ -37,6 +37,22 @@ restart.
 
 From the repository root:
 
+The same commands are available through the repository `Makefile`:
+
+```shell
+make check
+make lint
+make test
+```
+
+To install the pinned Ruff version:
+
+```shell
+make install-ruff
+```
+
+The direct commands are:
+
 ```shell
 python -m compileall -q mad-coder/scripts/python scripts tests
 python -m unittest discover -s tests -v
@@ -62,17 +78,34 @@ Before releasing:
 8. Select an HDA with a `PythonModule`. Choose it in the source selector, save a harmless change,
    and confirm the definition change is visible from another instance. Confirm both `hou` and
    `kwargs` are accepted as context globals.
-9. Make a buffer dirty, change node selection, and confirm Mad Coder does not discard the buffer.
-10. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
-11. Open a source in a non-writable HDA library and confirm it is view-only.
-12. Format deliberately irregular code and verify the cursor remains near its original position.
-13. Load and clear scenes while the panel is open and verify source discovery refreshes.
-14. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
+9. Add `print`, standard-error, and logging output to a Python SOP. Select **Run** and confirm the
+   node cooks and every message appears in Console exactly once.
+10. Raise an exception and confirm its traceback and failed status appear in Console without
+    closing the panel. Correct it and confirm a subsequent run succeeds.
+11. Make a buffer dirty, change node selection, and confirm Mad Coder does not discard the buffer.
+12. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
+13. Open a source in a non-writable HDA library and confirm it is view-only.
+14. Format deliberately irregular code and verify the cursor remains near its original position.
+15. Load and clear scenes while the panel is open and verify source discovery refreshes.
+16. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
    release.
 
 ## Build a release archive locally
 
 Install the pinned Ruff distribution into the active Python environment, then run:
+
+```shell
+make build-local
+```
+
+This creates `dist/mad-coder-0.0.0-dev-macos-arm64.zip` by default. Override the platform and
+version when needed:
+
+```shell
+make build-local PLATFORM=linux-x64 VERSION=0.0.0-dev
+```
+
+The direct command remains available:
 
 ```shell
 python scripts/build_release.py --version 0.1.0 --platform macos-arm64

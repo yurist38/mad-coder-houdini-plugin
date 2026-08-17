@@ -91,6 +91,7 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
             block = block.next()
             if not block.isValid():
                 break
+            block_number += 1
             top = bottom
             bottom = top + round(self.blockBoundingRect(block).height())
 
@@ -108,6 +109,29 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
             current_line.cursor = self.textCursor()
             current_line.cursor.clearSelection()
             selections.append(current_line)
+
+        diagnostic_lines: dict[int, str] = {}
+        block_count = self.blockCount()
+        for diagnostic in self._diagnostics:
+            first_line = max(1, diagnostic.line)
+            last_line = min(block_count, max(first_line, diagnostic.end_line))
+            for line in range(first_line, last_line + 1):
+                current_severity = diagnostic_lines.get(line)
+                if current_severity != "error":
+                    diagnostic_lines[line] = diagnostic.severity
+
+        for line, severity in sorted(diagnostic_lines.items()):
+            block = self.document().findBlockByNumber(line - 1)
+            if not block.isValid():
+                continue
+            line_selection = QtWidgets.QTextEdit.ExtraSelection()
+            line_selection.cursor = QtGui.QTextCursor(block)
+            line_selection.cursor.clearSelection()
+            color = QtGui.QColor("#f44747" if severity == "error" else "#cca700")
+            color.setAlpha(36 if severity == "error" else 28)
+            line_selection.format.setBackground(color)
+            line_selection.format.setProperty(QtGui.QTextFormat.Property.FullWidthSelection, True)
+            selections.append(line_selection)
 
         document_length = max(0, self.document().characterCount() - 1)
         for diagnostic in self._diagnostics:

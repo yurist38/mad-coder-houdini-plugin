@@ -7,8 +7,10 @@ from typing import cast
 import hou  # type: ignore[import-not-found]
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from .console import ExecutionConsole
 from .diagnostics import Diagnostic
 from .editor import MadCoderEditor
+from .execution import capture_execution
 from .linting import RuffService
 from .source import SessionSource, SourceAdapter, SourceConflictError, python_sources_for_node
 
@@ -23,6 +25,7 @@ class MadCoderPanel(QtWidgets.QWidget):
         self._baseline = ""
         self._loading = False
         self._updating_sources = False
+        self._running = False
         self._selection_callback_registered = False
         self._diagnostics: list[Diagnostic] = []
 
@@ -38,6 +41,10 @@ class MadCoderPanel(QtWidgets.QWidget):
             "Open supported Python code when a node is selected in the network editor"
         )
         self._use_selected_button = QtWidgets.QPushButton("Use Selected")
+        self._run_button = QtWidgets.QPushButton("Run")
+        self._run_button.setToolTip(
+            "Save and run the current source inside Houdini (Ctrl/Cmd+Enter)"
+        )
         self._save_button = QtWidgets.QPushButton("Save")
         self._reload_button = QtWidgets.QPushButton("Reload")
         self._format_button = QtWidgets.QPushButton("Format")
@@ -53,6 +60,7 @@ class MadCoderPanel(QtWidgets.QWidget):
         action_toolbar.setContentsMargins(0, 0, 0, 0)
         action_toolbar.addWidget(self._lint_badge)
         action_toolbar.addStretch(1)
+        action_toolbar.addWidget(self._run_button)
         action_toolbar.addWidget(self._reload_button)
         action_toolbar.addWidget(self._format_button)
         action_toolbar.addWidget(self._save_button)
@@ -72,9 +80,14 @@ class MadCoderPanel(QtWidgets.QWidget):
             2, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
         )
 
+        self._console = ExecutionConsole()
+        self._bottom_tabs = QtWidgets.QTabWidget()
+        self._bottom_tabs.addTab(self._problems, "Problems")
+        self._bottom_tabs.addTab(self._console, "Console")
+
         splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
         splitter.addWidget(self.editor)
-        splitter.addWidget(self._problems)
+        splitter.addWidget(self._bottom_tabs)
         splitter.setStretchFactor(0, 4)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([700, 180])
@@ -100,6 +113,7 @@ class MadCoderPanel(QtWidgets.QWidget):
         self._source_selector.currentIndexChanged.connect(self._source_selected)
         self._follow_selection.toggled.connect(self._follow_selection_toggled)
         self._use_selected_button.clicked.connect(self._use_selected_node)
+        self._run_button.clicked.connect(self.run_code)
         self._save_button.clicked.connect(self.save)
         self._reload_button.clicked.connect(self.reload)
         self._format_button.clicked.connect(self.format_code)
@@ -115,10 +129,15 @@ class MadCoderPanel(QtWidgets.QWidget):
             QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Save, self),
             QtGui.QShortcut(QtGui.QKeySequence("Ctrl+Shift+F"), self),
             QtGui.QShortcut(QtGui.QKeySequence("F5"), self),
+            # "Ctrl" maps to Cmd on macOS; "Return"/"Enter" cover both the main and keypad keys.
+            QtGui.QShortcut(QtGui.QKeySequence("Ctrl+Return"), self),
+            QtGui.QShortcut(QtGui.QKeySequence("Ctrl+Enter"), self),
         ]
         self._shortcuts[0].activated.connect(self.save)
         self._shortcuts[1].activated.connect(self.format_code)
         self._shortcuts[2].activated.connect(self.reload)
+        self._shortcuts[3].activated.connect(self.run_code)
+        self._shortcuts[4].activated.connect(self.run_code)
 
         self._register_selection_callback()
         self._refresh_sources(follow=True)
@@ -264,6 +283,7 @@ class MadCoderPanel(QtWidgets.QWidget):
         self.editor.setReadOnly(read_only)
         self._format_button.setEnabled(not read_only)
         self._save_button.setEnabled(self._is_dirty() and not read_only)
+        self._run_button.setEnabled(not self._running)
         return reason
 
     def _source_notice(self) -> tuple[str, bool]:
@@ -370,6 +390,52 @@ class MadCoderPanel(QtWidgets.QWidget):
         self._apply_source_state()
         self._update_source_title()
         self._set_status(f"Saved {self._source.display_name}")
+
+    def run_code(self) -> None:
+        if self._running:
+            return
+
+        read_only_reason = self._read_only_reason()
+        text = self.editor.toPlainText()
+        if read_only_reason is None:
+            try:
+                current = self._source.load()
+            except Exception as exc:
+                self._show_error(f"Could not read {self._source.display_name}", str(exc))
+                return
+            if current != self._baseline:
+                self._resolve_conflict(text)
+                return
+
+        self._bottom_tabs.setCurrentWidget(self._console)
+        self._console.begin(self._source.display_name)
+        self._running = True
+        self._apply_source_state()
+        self._set_status(f"Running {self._source.display_name}…")
+        saved = False
+
+        def execute() -> None:
+            nonlocal saved
+            if read_only_reason is None:
+                self._source.save(text, self._baseline)
+                saved = True
+            self._source.execute()
+
+        result = capture_execution(execute)
+        self._running = False
+        if saved:
+            self._baseline = text
+            self._update_source_title()
+        self._apply_source_state()
+        self._console.finish(result)
+
+        if result.succeeded:
+            self._set_status(f"Completed {self._source.display_name}")
+        else:
+            self._set_status(
+                f"Execution failed: {type(result.exception).__name__}: {result.exception}",
+                error=True,
+            )
 
     def format_code(self) -> None:
         if self.editor.isReadOnly():

@@ -1,5 +1,7 @@
 # Mad Coder
 
+<img src="mad-coder/config/Icons/MAD_mad_coder.svg" alt="Mad Coder logo" width="128">
+
 Mad Coder is a dockable Python editor for SideFX Houdini with live Ruff diagnostics and formatting.
 It edits the current scene's `hou.session` module, Python code parameters on selected nodes, and
 the `PythonModule` section of selected Houdini digital assets without modifying Houdini's internal
@@ -10,9 +12,11 @@ editor widgets.
 - Native dockable Python Panel built with Houdini's bundled PySide6
 - Python syntax highlighting, line numbers, automatic indentation, and adjustable font size
 - Debounced Ruff linting that never blocks Houdini's UI
-- Inline warning/error underlines with hover text
+- Full-line error/warning highlights with precise underlines and hover text
 - Navigable Problems list
 - Ruff formatting
+- Built-in console for captured `print`, standard error, logging, and tracebacks
+- Context-aware Run action for scene, node, and HDA code
 - Save and reload shortcuts
 - Protection against overwriting changes made through another editor
 - Follow Selection mode for opening supported code from the selected node
@@ -32,6 +36,40 @@ It targets **Houdini 21.0 and newer**, using Qt 6/PySide6:
 Python 3.11 is the minimum supported interpreter. This covers Houdini 21's main Qt 6 build and
 Houdini 22's Python 3.11 and 3.13 builds. Qt 5 builds, Houdini 20.5 and older, Intel macOS, and
 Linux ARM are outside the initial support scope.
+
+## Local development
+
+From a checkout, install the pinned Ruff version and run the repository checks:
+
+```shell
+make install-ruff
+make check
+```
+
+To test directly from the checkout, create
+`$HOUDINI_USER_PREF_DIR/packages/mad-coder-dev.json` with the checkout's `mad-coder` directory as
+its `hpath`:
+
+```json
+{
+  "enable": "houdini_version >= '21.0'",
+  "show": true,
+  "hpath": "/absolute/path/to/mad-coder-houdini-plugin/mad-coder"
+}
+```
+
+Restart Houdini after adding or changing the package file. Python module changes can usually be
+tested with **Reload Interface** in the Python Panel menu.
+
+To create a local development ZIP instead:
+
+```shell
+make build-local
+```
+
+This creates `dist/mad-coder-0.0.0-dev-macos-arm64.zip` by default. Override `PLATFORM` and
+`VERSION` for another target. See [Development](docs/DEVELOPMENT.md) for the full setup and
+interactive smoke-test checklist.
 
 ## How to install the plugin
 
@@ -124,6 +162,7 @@ select the node again or click **Use Selected**.
 - Click a row in **Problems** to jump to its location.
 - Select **Format** to apply Ruff formatting to the editor buffer.
 - Select **Save** to apply the buffer to its current Houdini source.
+- Select **Run** to save, execute in the source's Houdini context, and open captured output.
 - Select **Reload** to discard the buffer and read the current source again.
 
 Node-parameter changes are grouped as a Houdini undo operation. Saving a `PythonModule` changes
@@ -141,11 +180,35 @@ If the current source changed elsewhere after this panel loaded it, Save offers 
 - **Overwrite**: deliberately replace the external source.
 - **Cancel**: keep the unsaved buffer while deciding how to merge the changes.
 
+### Run code and view output
+
+Select **Run** or press `Ctrl+Enter` (`Cmd+Enter` on macOS). Mad Coder switches the lower pane to
+**Console** and captures synchronous Python standard output, standard error, logging records, and
+uncaught tracebacks. **Copy All** copies the complete console history and **Clear** removes it.
+
+Run applies the current buffer before executing it:
+
+- A Python node parameter is saved and its node is forced to cook in the correct Houdini context.
+  This preserves behavior such as `hou.pwd()` and geometry-write permissions.
+- `hou.session` is applied and evaluated by Houdini.
+- An HDA `PythonModule` is saved and loaded. Modules that only define functions may produce no
+  output until another callback invokes those functions.
+- A view-only node source can be cooked without changing its stored code.
+
+Run is not a sandbox or a full debugger. It executes inside Houdini's main process. Long-running or
+infinite code can make Houdini unresponsive, and there is no safe way for Mad Coder to terminate
+arbitrary Python code. Save the scene before running unfamiliar code.
+
+The console captures synchronous Python output during the Run operation. Native Houdini/C++ output,
+subprocess output, and messages emitted later by background threads may still appear only in
+Houdini's normal console or Python Shell.
+
 ### Shortcuts
 
 | Action | Shortcut |
 | --- | --- |
 | Save | Platform-standard Save (`Ctrl+S` / `Cmd+S`) |
+| Run and show Console | `Ctrl+Enter` / `Cmd+Enter` |
 | Format | `Ctrl+Shift+F` |
 | Reload | `F5` |
 | Change font size | `Ctrl` + mouse wheel |
@@ -211,6 +274,7 @@ inside Houdini's native editor.
 - Ruff fixes are shown as fixable diagnostics but are not individually applied; Format formats the
   complete buffer.
 - The syntax highlighter is intentionally lightweight and is not a full Python parser.
+- Run executes synchronously on Houdini's main thread and cannot safely stop an infinite script.
 
 HDA event handlers, external files, quick fixes, and language-server support are natural follow-up
 milestones.

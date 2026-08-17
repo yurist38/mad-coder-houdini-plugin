@@ -29,6 +29,8 @@ class SourceAdapter(Protocol):
 
     def save(self, text: str, expected: str | None) -> None: ...
 
+    def execute(self) -> None: ...
+
     def read_only_reason(self) -> str | None: ...
 
 
@@ -69,6 +71,9 @@ class SessionSource:
 
     def read_only_reason(self) -> str | None:
         return None
+
+    def execute(self) -> None:
+        """The session module is evaluated by ``save``."""
 
 
 class NodeParameterSource:
@@ -130,6 +135,16 @@ class NodeParameterSource:
             return str(exc)
         return None
 
+    def execute(self) -> None:
+        """Force the node to cook in its native Houdini context."""
+
+        node = self._resolve_node()
+        node.cook(force=True)
+        if hasattr(node, "errors"):
+            errors = tuple(node.errors())
+            if errors:
+                raise RuntimeError("Node cook failed:\n" + "\n".join(map(str, errors)))
+
 
 class HDASectionSource:
     """Read and write a textual Python section on an HDA definition."""
@@ -190,6 +205,11 @@ class HDASectionSource:
         if library_path != "Embedded" and not os.access(library_path, os.W_OK):
             return f"The asset library is not writable: {library_path}"
         return None
+
+    def execute(self) -> None:
+        """Load the asset module after its section has been updated."""
+
+        self._resolve_node().type().hdaModule()
 
 
 def python_sources_for_node(node: Any, hou_module: Any | None = None) -> list[SourceAdapter]:

@@ -15,15 +15,19 @@ Houdini package JSON
       │   ├── NodeParameterSource → selected-node string parameters
       │   └── HDASectionSource → asset PythonModule sections
       ├── MadCoderEditor → text editing, line numbers, inline diagnostic rendering
+      ├── ExecutionConsole → captured Python output and run history
+      ├── capture_execution → stream, logging, timing, and traceback capture
       ├── PythonHighlighter → dependency-free token highlighting
       └── RuffService → asynchronous lint and format subprocesses
 ```
 
 ## UI thread policy
 
-All widgets and `hou` calls stay on Houdini's main thread. Ruff work runs in a `QProcess`, so linting
-does not execute on the UI thread and does not require calling `hou` from a worker. Results return
-through Qt signals. Starting a new lint pass invalidates or terminates the preceding pass.
+All widgets, source execution, node cooking, and `hou` calls stay on Houdini's main thread. This is
+required for the live Houdini scene, but means arbitrary user code can block the application. Ruff
+work runs in a `QProcess`, so linting does not execute on the UI thread and does not require calling
+`hou` from a worker. Results return through Qt signals. Starting a new lint pass invalidates or
+terminates the preceding pass.
 
 ## Source consistency
 
@@ -45,6 +49,7 @@ Source adapters expose the same conceptual contract:
 - Houdini globals available to the linter in that execution context
 - `load() -> str`
 - `save(text, expected)` with conflict detection
+- `execute()` using the source's native Houdini behavior
 - `read_only_reason()`
 
 `python_sources_for_node` currently discovers common Python parameter names and an HDA
@@ -64,6 +69,18 @@ the editor. The contexts deliberately remain source-specific to avoid hiding gen
 names. A future settings UI can expose rules or configuration files, but it should preserve
 deterministic defaults and report the active configuration clearly.
 
+## Execution boundary
+
+`capture_execution` temporarily redirects Python stdout and stderr and adds a root logging handler.
+It always restores the original streams and handler in a `finally` path, catches `BaseException`
+so `SystemExit` does not terminate Houdini, and returns a traceback as console output. Capture is
+limited to synchronous Python work performed during the call.
+
+The panel saves a writable buffer inside the capture boundary, then calls the source adapter's
+`execute()`. A node parameter forces `node.cook(force=True)` and reports node cook errors; a session
+module is already evaluated by its save operation; an HDA source loads its module after updating the
+section. A read-only source skips saving and executes its stored code where supported.
+
 ## Failure behavior
 
 - Missing Ruff: standard-library syntax checking remains available.
@@ -73,3 +90,4 @@ deterministic defaults and report the active configuration clearly.
 - Locked or non-writable source: the source remains available in view-only mode.
 - Selection change: a Houdini selection callback refreshes the source selector on the UI thread.
 - Scene load/clear: Python Panel lifecycle hooks reset source discovery for the new scene.
+- Execution exception: the traceback remains in Console and the editor stays open.

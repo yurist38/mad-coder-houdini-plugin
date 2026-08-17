@@ -52,7 +52,12 @@ def build(version: str, platform: str, output: Path) -> Path:
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
         )
         shutil.copy2(ROOT / "LICENSE", content / "LICENSE")
-        shutil.copy2(ROOT / "README.md", content / "README.md")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        packaged_readme = readme.replace(
+            'src="mad-coder/config/Icons/MAD_mad_coder.svg"',
+            'src="config/Icons/MAD_mad_coder.svg"',
+        )
+        (content / "README.md").write_text(packaged_readme, encoding="utf-8")
         shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", content / "THIRD_PARTY_NOTICES.md")
 
         binary_directory = content / "bin"
