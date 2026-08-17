@@ -9,6 +9,7 @@
 - Open locked parameters and non-writable asset definitions in view-only mode.
 - Group node-parameter saves in Houdini's undo history.
 - Recognize context-provided `hou` and `kwargs` names without adding imports to saved code.
+- Add a built-in execution console with captured output, logging, tracebacks, and source-aware Run.
 
 All notable changes will be documented here.
 

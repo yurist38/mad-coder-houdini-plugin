@@ -25,6 +25,6 @@ def onHipFileAfterClear():
         _panel.scene_changed()
 ]]></script>
     <includeInToolbarMenu menu_position="210" create_separator="false"/>
-    <help><![CDATA[Mad Coder edits hou.session, selected node Python parameters, and HDA PythonModule sections with Ruff linting and formatting.]]></help>
+    <help><![CDATA[Mad Coder edits and runs hou.session, selected node Python parameters, and HDA PythonModule sections with Ruff linting, formatting, and captured console output.]]></help>
   </interface>
 </pythonPanelDocument>

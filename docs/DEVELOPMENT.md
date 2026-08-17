@@ -62,12 +62,16 @@ Before releasing:
 8. Select an HDA with a `PythonModule`. Choose it in the source selector, save a harmless change,
    and confirm the definition change is visible from another instance. Confirm both `hou` and
    `kwargs` are accepted as context globals.
-9. Make a buffer dirty, change node selection, and confirm Mad Coder does not discard the buffer.
-10. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
-11. Open a source in a non-writable HDA library and confirm it is view-only.
-12. Format deliberately irregular code and verify the cursor remains near its original position.
-13. Load and clear scenes while the panel is open and verify source discovery refreshes.
-14. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
+9. Add `print`, standard-error, and logging output to a Python SOP. Select **Run** and confirm the
+   node cooks and every message appears in Console exactly once.
+10. Raise an exception and confirm its traceback and failed status appear in Console without
+    closing the panel. Correct it and confirm a subsequent run succeeds.
+11. Make a buffer dirty, change node selection, and confirm Mad Coder does not discard the buffer.
+12. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
+13. Open a source in a non-writable HDA library and confirm it is view-only.
+14. Format deliberately irregular code and verify the cursor remains near its original position.
+15. Load and clear scenes while the panel is open and verify source discovery refreshes.
+16. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
    release.
 
 ## Build a release archive locally
