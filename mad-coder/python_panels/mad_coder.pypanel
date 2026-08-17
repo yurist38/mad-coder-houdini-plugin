@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <pythonPanelDocument>
-  <interface name="mad_coder" label="Mad Coder" icon="MISC_python" showNetworkNavigationBar="false" help_url="">
+  <interface name="mad_coder" label="Mad Coder" icon="MAD_mad_coder.svg" showNetworkNavigationBar="false" help_url="">
     <script><![CDATA[from mad_coder.panel import MadCoderPanel
 
 _panel = None

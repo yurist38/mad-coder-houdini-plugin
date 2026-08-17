@@ -37,6 +37,22 @@ restart.
 
 From the repository root:
 
+The same commands are available through the repository `Makefile`:
+
+```shell
+make check
+make lint
+make test
+```
+
+To install the pinned Ruff version:
+
+```shell
+make install-ruff
+```
+
+The direct commands are:
+
 ```shell
 python -m compileall -q mad-coder/scripts/python scripts tests
 python -m unittest discover -s tests -v
@@ -77,6 +93,19 @@ Before releasing:
 ## Build a release archive locally
 
 Install the pinned Ruff distribution into the active Python environment, then run:
+
+```shell
+make build-local
+```
+
+This creates `dist/mad-coder-0.0.0-dev-macos-arm64.zip` by default. Override the platform and
+version when needed:
+
+```shell
+make build-local PLATFORM=linux-x64 VERSION=0.0.0-dev
+```
+
+The direct command remains available:
 
 ```shell
 python scripts/build_release.py --version 0.1.0 --platform macos-arm64

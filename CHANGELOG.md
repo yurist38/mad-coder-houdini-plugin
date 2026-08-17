@@ -10,6 +10,9 @@
 - Group node-parameter saves in Houdini's undo history.
 - Recognize context-provided `hou` and `kwargs` names without adding imports to saved code.
 - Add a built-in execution console with captured output, logging, tracebacks, and source-aware Run.
+- Fix the editor gutter so each visible line displays its actual line number.
+- Add the custom Mad Coder icon for Houdini's panel menus and tabs.
+- Highlight complete error and warning lines while retaining precise diagnostic underlines.
 
 All notable changes will be documented here.
 

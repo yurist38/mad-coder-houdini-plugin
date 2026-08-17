@@ -1,5 +1,7 @@
 # Mad Coder
 
+<img src="mad-coder/config/Icons/MAD_mad_coder.svg" alt="Mad Coder logo" width="128">
+
 Mad Coder is a dockable Python editor for SideFX Houdini with live Ruff diagnostics and formatting.
 It edits the current scene's `hou.session` module, Python code parameters on selected nodes, and
 the `PythonModule` section of selected Houdini digital assets without modifying Houdini's internal
@@ -10,7 +12,7 @@ editor widgets.
 - Native dockable Python Panel built with Houdini's bundled PySide6
 - Python syntax highlighting, line numbers, automatic indentation, and adjustable font size
 - Debounced Ruff linting that never blocks Houdini's UI
-- Inline warning/error underlines with hover text
+- Full-line error/warning highlights with precise underlines and hover text
 - Navigable Problems list
 - Ruff formatting
 - Built-in console for captured `print`, standard error, logging, and tracebacks
@@ -34,6 +36,40 @@ It targets **Houdini 21.0 and newer**, using Qt 6/PySide6:
 Python 3.11 is the minimum supported interpreter. This covers Houdini 21's main Qt 6 build and
 Houdini 22's Python 3.11 and 3.13 builds. Qt 5 builds, Houdini 20.5 and older, Intel macOS, and
 Linux ARM are outside the initial support scope.
+
+## Local development
+
+From a checkout, install the pinned Ruff version and run the repository checks:
+
+```shell
+make install-ruff
+make check
+```
+
+To test directly from the checkout, create
+`$HOUDINI_USER_PREF_DIR/packages/mad-coder-dev.json` with the checkout's `mad-coder` directory as
+its `hpath`:
+
+```json
+{
+  "enable": "houdini_version >= '21.0'",
+  "show": true,
+  "hpath": "/absolute/path/to/mad-coder-houdini-plugin/mad-coder"
+}
+```
+
+Restart Houdini after adding or changing the package file. Python module changes can usually be
+tested with **Reload Interface** in the Python Panel menu.
+
+To create a local development ZIP instead:
+
+```shell
+make build-local
+```
+
+This creates `dist/mad-coder-0.0.0-dev-macos-arm64.zip` by default. Override `PLATFORM` and
+`VERSION` for another target. See [Development](docs/DEVELOPMENT.md) for the full setup and
+interactive smoke-test checklist.
 
 ## How to install the plugin
 

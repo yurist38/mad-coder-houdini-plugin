@@ -129,12 +129,15 @@ class MadCoderPanel(QtWidgets.QWidget):
             QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Save, self),
             QtGui.QShortcut(QtGui.QKeySequence("Ctrl+Shift+F"), self),
             QtGui.QShortcut(QtGui.QKeySequence("F5"), self),
+            # "Ctrl" maps to Cmd on macOS; "Return"/"Enter" cover both the main and keypad keys.
             QtGui.QShortcut(QtGui.QKeySequence("Ctrl+Return"), self),
+            QtGui.QShortcut(QtGui.QKeySequence("Ctrl+Enter"), self),
         ]
         self._shortcuts[0].activated.connect(self.save)
         self._shortcuts[1].activated.connect(self.format_code)
         self._shortcuts[2].activated.connect(self.reload)
         self._shortcuts[3].activated.connect(self.run_code)
+        self._shortcuts[4].activated.connect(self.run_code)
 
         self._register_selection_callback()
         self._refresh_sources(follow=True)

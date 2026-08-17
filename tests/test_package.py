@@ -18,6 +18,12 @@ class PackageTests(unittest.TestCase):
         interface = document.getroot().find("interface")
         self.assertIsNotNone(interface)
         self.assertEqual(interface.attrib["name"], "mad_coder")
+        self.assertEqual(interface.attrib["icon"], "MAD_mad_coder.svg")
+        icon = ROOT / "mad-coder" / "config" / "Icons" / interface.attrib["icon"]
+        self.assertTrue(icon.is_file())
+        icon_root = ET.parse(icon).getroot()
+        self.assertEqual(icon_root.tag, "{http://www.w3.org/2000/svg}svg")
+        self.assertEqual(icon_root.attrib["viewBox"], "0 0 64 64")
 
 
 if __name__ == "__main__":
