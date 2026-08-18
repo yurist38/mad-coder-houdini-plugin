@@ -1,11 +1,13 @@
 # Mad Coder
 
-<img src="mad-coder/config/Icons/MAD_mad_coder.svg" alt="Mad Coder logo" width="128">
+![Mad Coder logo](mad-coder/config/Icons/MAD_mad_coder.svg)
 
 Mad Coder is a dockable Python editor for SideFX Houdini with live Ruff diagnostics and formatting.
 It edits the current scene's `hou.session` module, Python code parameters on selected nodes, and
 the `PythonModule` section of selected Houdini digital assets without modifying Houdini's internal
 editor widgets.
+
+![Mad Coder preview](docs/images/mad-coder-preview.jpg)
 
 ## Features
 
