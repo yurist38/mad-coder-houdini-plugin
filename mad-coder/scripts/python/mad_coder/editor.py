@@ -33,7 +33,6 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
         self.set_code_font(font.family(), 11)
         self.setLineWrapMode(QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap)
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
         self.setMouseTracking(True)
 
         self.blockCountChanged.connect(self._update_line_number_width)
