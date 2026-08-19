@@ -17,6 +17,7 @@ Houdini package JSON
       ├── MadCoderEditor → text editing, line numbers, inline diagnostic rendering
       ├── ExecutionConsole → captured Python output and run history
       ├── capture_execution → stream, logging, timing, and traceback capture
+      ├── PreferencesStore / SettingsDialog → validated persistent user settings
       ├── PythonHighlighter → dependency-free token highlighting
       └── RuffService → asynchronous lint and format subprocesses
 ```
@@ -81,6 +82,17 @@ The panel saves a writable buffer inside the capture boundary, then calls the so
 module is already evaluated by its save operation; an HDA source loads its module after updating the
 section. A read-only source skips saving and executes its stored code where supported.
 
+## User preferences
+
+The sectioned `SettingsDialog` currently exposes the Editor font family and size. Its font picker is
+restricted to fonts Qt identifies as monospaced. `PreferencesStore` contains no Qt dependency and
+validates values read from an injected QSettings-compatible backend. The panel uses an explicitly
+named `QSettings("Mad Coder", "Mad Coder")` store so preferences are independent of Houdini's own
+application settings.
+
+The default resolver prefers Roboto Mono when installed and otherwise uses Qt's system fixed-width
+font. Missing saved fonts and malformed sizes fall back safely; sizes are clamped to 7–32 pt.
+
 ## Failure behavior
 
 - Missing Ruff: standard-library syntax checking remains available.
@@ -91,3 +103,4 @@ section. A read-only source skips saving and executes its stored code where supp
 - Selection change: a Houdini selection callback refreshes the source selector on the UI thread.
 - Scene load/clear: Python Panel lifecycle hooks reset source discovery for the new scene.
 - Execution exception: the traceback remains in Console and the editor stays open.
+- Missing configured font: the editor falls back to the current system fixed-width font.

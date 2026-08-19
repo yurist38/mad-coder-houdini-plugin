@@ -13,6 +13,8 @@
 - Fix the editor gutter so each visible line displays its actual line number.
 - Add the custom Mad Coder icon for Houdini's panel menus and tabs.
 - Highlight complete error and warning lines while retaining precise diagnostic underlines.
+- Add persistent Editor font settings with monospaced selection, sizing, preview, and defaults.
+- Focus the code editor and place the caret on the first click.
 
 All notable changes will be documented here.
 

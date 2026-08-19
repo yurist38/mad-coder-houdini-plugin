@@ -30,9 +30,9 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
         self._highlighter = PythonHighlighter(self.document())
 
         font = QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont)
-        font.setPointSize(11)
-        self.setFont(font)
+        self.set_code_font(font.family(), 11)
         self.setLineWrapMode(QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
         self.setMouseTracking(True)
 
@@ -40,6 +40,16 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
         self.updateRequest.connect(self._update_line_number_area)
         self.cursorPositionChanged.connect(self._refresh_extra_selections)
         self._update_line_number_width()
+
+    def set_code_font(self, family: str, point_size: int) -> None:
+        """Apply the configured monospaced editor font."""
+
+        font = QtGui.QFont(family, point_size)
+        font.setStyleHint(QtGui.QFont.StyleHint.Monospace)
+        self.setFont(font)
+        self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
+        self._update_line_number_width()
+        self._line_area.update()
 
     def line_number_area_width(self) -> int:
         digits = max(2, len(str(max(1, self.blockCount()))))
@@ -187,6 +197,11 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
         else:
             QtWidgets.QToolTip.hideText()
         super().mouseMoveEvent(event)
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802 - Qt API
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self.setFocus(QtCore.Qt.FocusReason.MouseFocusReason)
+        super().mousePressEvent(event)
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:  # noqa: N802 - Qt API
         if event.key() == QtCore.Qt.Key.Key_Tab and not event.modifiers():

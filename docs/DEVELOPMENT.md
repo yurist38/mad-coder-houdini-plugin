@@ -86,8 +86,12 @@ Before releasing:
 12. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
 13. Open a source in a non-writable HDA library and confirm it is view-only.
 14. Format deliberately irregular code and verify the cursor remains near its original position.
-15. Load and clear scenes while the panel is open and verify source discovery refreshes.
-16. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
+15. Open **Settings…**, select another monospaced font and size, and confirm the preview and editor
+    update. Close and reopen Houdini and confirm the choice persists.
+16. Use **Restore Defaults** and confirm Roboto Mono is selected when installed, or the platform
+    fixed-width font otherwise. Confirm Cancel does not apply a change.
+17. Load and clear scenes while the panel is open and verify source discovery refreshes.
+18. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
    release.
 
 ## Build a release archive locally

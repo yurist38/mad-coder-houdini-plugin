@@ -12,7 +12,7 @@ editor widgets.
 ## Features
 
 - Native dockable Python Panel built with Houdini's bundled PySide6
-- Python syntax highlighting, line numbers, automatic indentation, and adjustable font size
+- Python syntax highlighting, line numbers, automatic indentation, and persistent font settings
 - Debounced Ruff linting that never blocks Houdini's UI
 - Full-line error/warning highlights with precise underlines and hover text
 - Navigable Problems list
@@ -157,6 +157,17 @@ includes **Scene · hou.session**, so you can return to scene-level code at any 
 Mad Coder does not discard an unsaved buffer when selection changes. Save or reload first, then
 select the node again or click **Use Selected**.
 
+### Configure the editor font
+
+Select **Settings…** in the Mad Coder toolbar, then open the **Editor** section. The settings window
+offers installed monospaced font families, a 7–32 pt size control, a live code preview, and
+**Restore Defaults**. Select **OK** to apply and persist the choice; **Cancel** leaves the editor
+unchanged.
+
+Mad Coder prefers **Roboto Mono** as its default when that font is installed. It does not bundle the
+font, so systems without Roboto Mono use Qt's platform fixed-width font instead, such as Menlo on
+macOS or Consolas on Windows. `Ctrl` + mouse wheel remains available for temporary zooming.
+
 ### Editing workflow
 
 - Type normally; linting runs after a short pause.
@@ -213,7 +224,7 @@ Houdini's normal console or Python Shell.
 | Run and show Console | `Ctrl+Enter` / `Cmd+Enter` |
 | Format | `Ctrl+Shift+F` |
 | Reload | `F5` |
-| Change font size | `Ctrl` + mouse wheel |
+| Temporarily zoom editor font | `Ctrl` + mouse wheel |
 
 ## Linting behavior
 
