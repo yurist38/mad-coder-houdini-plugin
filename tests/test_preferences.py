@@ -60,6 +60,24 @@ class PreferencesStoreTests(unittest.TestCase):
 
         self.assertEqual(self.store.load().font_family, "Menlo")
 
+    def test_saved_font_matches_available_family_case_insensitively(self) -> None:
+        self.backend.values[PreferencesStore.FONT_FAMILY_KEY] = "roboto mono"
+
+        self.assertEqual(self.store.load().font_family, "Roboto Mono")
+
+    def test_unavailable_default_falls_back_to_available_family(self) -> None:
+        store = PreferencesStore(self.backend, "Missing Mono", ["Menlo", "Roboto Mono"])
+        self.backend.values[PreferencesStore.FONT_FAMILY_KEY] = "Missing Mono"
+
+        self.assertEqual(store.load().font_family, "Menlo")
+
+    def test_save_with_unavailable_default_stores_available_family(self) -> None:
+        store = PreferencesStore(self.backend, "Missing Mono", ["Menlo", "Roboto Mono"])
+
+        store.save(EditorPreferences("Missing Mono", 14))
+
+        self.assertEqual(self.backend.values[PreferencesStore.FONT_FAMILY_KEY], "Menlo")
+
     def test_invalid_size_falls_back_to_default(self) -> None:
         self.backend.values[PreferencesStore.FONT_SIZE_KEY] = "large"
 

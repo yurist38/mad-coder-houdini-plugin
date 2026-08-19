@@ -47,13 +47,18 @@ class PreferencesStore:
         available_families: list[str],
     ) -> None:
         self._backend = backend
-        self.default = EditorPreferences(default_family, DEFAULT_FONT_SIZE)
-        self._available_families = set(available_families)
+        self._available_families = {family.casefold(): family for family in available_families}
+        self.default = EditorPreferences(self._validated_font_family(default_family), DEFAULT_FONT_SIZE)
+
+    def _validated_font_family(self, family: str) -> str:
+        normalized_family = family.casefold()
+        if normalized_family in self._available_families:
+            return self._available_families[normalized_family]
+        return next(iter(self._available_families.values()), family)
 
     def load(self) -> EditorPreferences:
         family = str(self._backend.value(self.FONT_FAMILY_KEY, self.default.font_family))
-        if family not in self._available_families:
-            family = self.default.font_family
+        family = self._validated_font_family(family)
 
         raw_size = self._backend.value(self.FONT_SIZE_KEY, self.default.font_size)
         try:
@@ -64,9 +69,7 @@ class PreferencesStore:
         return EditorPreferences(family, size)
 
     def save(self, preferences: EditorPreferences) -> None:
-        family = preferences.font_family
-        if family not in self._available_families:
-            family = self.default.font_family
+        family = self._validated_font_family(preferences.font_family)
         size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, preferences.font_size))
         self._backend.setValue(self.FONT_FAMILY_KEY, family)
         self._backend.setValue(self.FONT_SIZE_KEY, size)
