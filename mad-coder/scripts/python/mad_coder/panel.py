@@ -12,6 +12,8 @@ from .diagnostics import Diagnostic
 from .editor import MadCoderEditor
 from .execution import capture_execution
 from .linting import RuffService
+from .preferences import EditorPreferences, PreferencesStore, default_font_family
+from .settings_dialog import SettingsDialog
 from .source import SessionSource, SourceAdapter, SourceConflictError, python_sources_for_node
 
 
@@ -29,6 +31,15 @@ class MadCoderPanel(QtWidgets.QWidget):
         self._selection_callback_registered = False
         self._diagnostics: list[Diagnostic] = []
 
+        available_fonts = list(QtGui.QFontDatabase.families())
+        system_fixed_font = QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont)
+        default_family = default_font_family(available_fonts, system_fixed_font.family())
+        self._preferences = PreferencesStore(
+            QtCore.QSettings("Mad Coder", "Mad Coder"),
+            default_family,
+            available_fonts,
+        )
+
         self._source_selector = QtWidgets.QComboBox()
         self._source_selector.setMinimumContentsLength(28)
         self._source_selector.setSizeAdjustPolicy(
@@ -41,6 +52,8 @@ class MadCoderPanel(QtWidgets.QWidget):
             "Open supported Python code when a node is selected in the network editor"
         )
         self._use_selected_button = QtWidgets.QPushButton("Use Selected")
+        self._settings_button = QtWidgets.QPushButton("Settings…")
+        self._settings_button.setToolTip("Configure Mad Coder")
         self._run_button = QtWidgets.QPushButton("Run")
         self._run_button.setToolTip(
             "Save and run the current source inside Houdini (Ctrl/Cmd+Enter)"
@@ -55,6 +68,7 @@ class MadCoderPanel(QtWidgets.QWidget):
         source_toolbar.addWidget(self._source_selector, 1)
         source_toolbar.addWidget(self._follow_selection)
         source_toolbar.addWidget(self._use_selected_button)
+        source_toolbar.addWidget(self._settings_button)
 
         action_toolbar = QtWidgets.QHBoxLayout()
         action_toolbar.setContentsMargins(0, 0, 0, 0)
@@ -66,6 +80,7 @@ class MadCoderPanel(QtWidgets.QWidget):
         action_toolbar.addWidget(self._save_button)
 
         self.editor = MadCoderEditor()
+        self._apply_editor_preferences(self._preferences.load())
 
         self._problems = QtWidgets.QTreeWidget()
         self._problems.setHeaderLabels(["Problem", "Code", "Line"])
@@ -113,6 +128,7 @@ class MadCoderPanel(QtWidgets.QWidget):
         self._source_selector.currentIndexChanged.connect(self._source_selected)
         self._follow_selection.toggled.connect(self._follow_selection_toggled)
         self._use_selected_button.clicked.connect(self._use_selected_node)
+        self._settings_button.clicked.connect(self.open_settings)
         self._run_button.clicked.connect(self.run_code)
         self._save_button.clicked.connect(self.save)
         self._reload_button.clicked.connect(self.reload)
@@ -225,6 +241,20 @@ class MadCoderPanel(QtWidgets.QWidget):
 
     def _use_selected_node(self) -> None:
         self._refresh_sources(follow=True)
+
+    def _apply_editor_preferences(self, preferences: EditorPreferences) -> None:
+        self.editor.set_code_font(preferences.font_family, preferences.font_size)
+
+    def open_settings(self) -> None:
+        font = self.editor.font()
+        current = EditorPreferences(font.family(), font.pointSize())
+        dialog = SettingsDialog(current, self._preferences.default, self)
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        self._preferences.save(dialog.selected_preferences())
+        preferences = self._preferences.load()
+        self._apply_editor_preferences(preferences)
+        self._set_status(f"Editor font set to {preferences.font_family} {preferences.font_size} pt")
 
     def _source_selected(self, index: int) -> None:
         if self._updating_sources or index < 0:
