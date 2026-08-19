@@ -46,7 +46,6 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
         font = QtGui.QFont(family, point_size)
         font.setStyleHint(QtGui.QFont.StyleHint.Monospace)
         self.setFont(font)
-        self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
         self._update_line_number_width()
         self._line_area.update()
 
@@ -223,7 +222,6 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
             change = 1 if event.angleDelta().y() > 0 else -1
             font.setPointSize(max(7, min(32, font.pointSize() + change)))
             self.setFont(font)
-            self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
             self._update_line_number_width()
             event.accept()
             return
