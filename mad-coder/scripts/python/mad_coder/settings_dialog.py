@@ -101,4 +101,3 @@ class SettingsDialog(QtWidgets.QDialog):
         font = QtGui.QFont(self._font_family.currentFont().family(), self._font_size.value())
         font.setStyleHint(QtGui.QFont.StyleHint.Monospace)
         self._preview.setFont(font)
-        self._preview.setTabStopDistance(self._preview.fontMetrics().horizontalAdvance(" ") * 4)
