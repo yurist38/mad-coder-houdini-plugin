@@ -4,6 +4,8 @@
 
 - Houdini 21.0 or newer with Qt 6/PySide6 for interactive testing
 - Python 3.11 or newer for unit tests
+- Jedi 0.20.0, Parso 0.8.7, and types-houdini 21.0.512.3 for autocomplete
+- ty 0.0.72 for editor type diagnostics
 - Ruff 0.16.0 and BasedPyright 1.39.9 for repository checks
 - Git
 
@@ -15,6 +17,12 @@ so two Python language servers do not report competing diagnostics.
 PySide6 and `hou` are supplied by Houdini. They are deliberately not declared as installable
 Python dependencies because a separately installed Qt binding can conflict with Houdini's Qt
 runtime.
+
+`requirements-runtime.txt` pins the pure-Python packages bundled into release archives.
+`requirements-dev.txt` includes those runtime packages as well as the repository checks. A source
+checkout opened directly by Houdini needs all packages in `requirements-runtime.txt` on Houdini's
+Python path for autocomplete; the editor otherwise degrades cleanly. Local release ZIPs always
+include the pinned packages.
 
 ## Source checkout installation
 
@@ -30,8 +38,8 @@ path:
 }
 ```
 
-Install Ruff 0.16.0 separately and make it visible through `PATH`, copy its executable to
-`mad-coder/bin`, or set `MAD_CODER_RUFF` before starting Houdini. Restart
+Install Ruff 0.16.0 and ty 0.0.72 separately and make them visible through `PATH`, copy their
+executables to `mad-coder/bin`, or set `MAD_CODER_RUFF` and `MAD_CODER_TY` before starting Houdini. Restart
 Houdini after adding or changing package files.
 
 Python module edits can usually be tested by choosing **Reload Interface** from the Python Panel's
@@ -51,7 +59,7 @@ make test
 make typecheck
 ```
 
-To install the pinned Ruff and Pyright versions:
+To install the pinned runtime and code-check dependencies:
 
 ```shell
 make install-checks
@@ -79,36 +87,45 @@ Before releasing:
 2. Open Mad Coder from a Python Panel.
 3. Enter an unused import and confirm that Ruff reports `F401` without freezing the UI.
 4. Enter invalid syntax and confirm that it appears inline and in Problems.
-5. Correct the source, save it, and confirm the new member is available from the Python Shell.
-6. Modify `hou.session` through the native source editor and verify conflict handling.
-7. Create and select a Python SOP. Confirm its code opens, saves, cooks, and participates in
+5. Enter `"some string".notexistingmethod` and confirm ty reports `unresolved-attribute`. Enter
+   `hou.node("/")` and confirm it stays clean, then enter `hou.notexistingmethod` and confirm ty
+   reports the missing HOM member.
+6. Correct the source, save it, and confirm the new member is available from the Python Shell.
+7. Type `hou.` and confirm the completion popup appears without freezing Houdini. Filter the list,
+   accept a candidate with Tab, and dismiss it with Escape. Type a prefix with no matches and
+   confirm typing continues after the popup closes without another click. Confirm explicit
+   `Ctrl+Space` completion works for a local Python value.
+8. Modify `hou.session` through the native source editor and verify conflict handling.
+9. Create and select a Python SOP. Confirm its code opens, saves, cooks, and participates in
    Houdini undo. Confirm `hou.pwd()` does not produce an `F821` diagnostic while a genuinely
    undefined name still does.
-8. Select an HDA with a `PythonModule`. Choose it in the source selector, save a harmless change,
+10. Select an HDA with a `PythonModule`. Choose it in the source selector, save a harmless change,
    and confirm the definition change is visible from another instance. Confirm both `hou` and
    `kwargs` are accepted as context globals.
-9. Select an HDA with a `ViewerStateModule`. Choose it in the source selector, save a harmless
+11. Select an HDA with a `ViewerStateModule`. Choose it in the source selector, save a harmless
    change, run it, and verify the embedded viewer state reloads without restarting Houdini.
    Confirm both `hou` and `kwargs` are accepted as context globals.
-10. Add `print`, standard-error, and logging output to a Python SOP. Select **Run** and confirm the
+12. Add `print`, standard-error, and logging output to a Python SOP. Select **Run** and confirm the
    node cooks and every message appears in Console exactly once.
-11. Raise an exception and confirm its traceback and failed status appear in Console without
+13. Raise an exception and confirm its traceback and failed status appear in Console without
     closing the panel. Correct it and confirm a subsequent run succeeds.
-12. Make a buffer dirty, change node selection, and confirm Mad Coder does not discard the buffer.
-13. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
-14. Open a source in a non-writable HDA library and confirm it is view-only.
-15. Format deliberately irregular code and verify the cursor remains near its original position.
-16. Open **Settings…**, select another monospaced font and size, and confirm the preview and editor
-    update. Close and reopen Houdini and confirm the choice persists.
-17. Use **Restore Defaults** and confirm Roboto Mono is selected when installed, or the platform
-    fixed-width font otherwise. Confirm Cancel does not apply a change.
-18. Load and clear scenes while the panel is open and verify source discovery refreshes.
-19. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
+14. Make a buffer dirty, change node selection, and confirm Mad Coder does not discard the buffer.
+15. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
+16. Open a source in a non-writable HDA library and confirm it is view-only.
+17. Format deliberately irregular code and verify the cursor remains near its original position.
+18. Open **Settings…**, select another monospaced font and size, disable autocomplete and type
+    checking, and confirm suggestions and ty diagnostics stop while Ruff continues. Close and
+    reopen Houdini and confirm the choices persist.
+19. Use **Restore Defaults** and confirm autocomplete and type checking are enabled and Roboto Mono
+    is selected when installed, or the platform fixed-width font otherwise. Confirm Cancel does not
+    apply a change.
+20. Load and clear scenes while the panel is open and verify source discovery refreshes.
+21. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
    release.
 
 ## Build a release archive locally
 
-Install the pinned Ruff distribution into the active Python environment, then run:
+Install the pinned runtime, Ruff, and ty distributions into the active Python environment, then run:
 
 ```shell
 make build-local
@@ -127,10 +144,11 @@ The direct command remains available:
 python scripts/build_release.py --version 0.1.0 --platform macos-arm64
 ```
 
-Use `linux-x64`, `windows-x64`, or `macos-arm64` as appropriate. The builder copies the Ruff
-executable and its license into the ZIP under `dist/`. It resolves both directly from the Ruff
-distribution installed for the active Python interpreter, so shell launchers such as pyenv shims are
-never packaged. Never use a binary from one operating system to build another platform's archive.
+Use `linux-x64`, `windows-x64`, or `macos-arm64` as appropriate. The builder copies the Ruff and ty
+executables, the pure-Python autocomplete dependencies, Houdini stubs, and their licenses into the
+ZIP under `dist/`. It resolves installed distribution files directly, so shell launchers such as
+pyenv shims are never packaged. Never use native binaries from one operating system to build another
+platform's archive.
 
 Inspect the ZIP before distribution. Its root must contain exactly the `packages` and `mad-coder`
 directories.
@@ -162,8 +180,8 @@ tagged source and retries publication without creating or moving a tag.
 3. Commit and push the release changes.
 4. Create and push an annotated tag such as `v0.1.0`.
 5. The Release workflow validates the source, then runs natively on Windows, Linux, and Apple
-   Silicon macOS, installs pinned Ruff, builds three archives, and creates the GitHub release with
-   generated notes and SHA-256 checksums.
+   Silicon macOS, installs the pinned runtime dependencies, Ruff, and ty, builds three archives, and
+   creates the GitHub release with generated notes and SHA-256 checksums.
 6. Download and inspect all three published archives.
 
 The CI workflow tests the minimum Python 3.11 runtime and runs Ruff and BasedPyright on every pull

@@ -35,8 +35,18 @@ class SettingsDialog(QtWidgets.QDialog):
         self._font_size = QtWidgets.QSpinBox()
         self._font_size.setRange(MIN_FONT_SIZE, MAX_FONT_SIZE)
         self._font_size.setSuffix(" pt")
+        self._autocomplete_enabled = QtWidgets.QCheckBox("Enabled")
+        self._autocomplete_enabled.setToolTip(
+            "Show suggestions after a dot and when Ctrl+Space is pressed"
+        )
+        self._type_checking_enabled = QtWidgets.QCheckBox("Enabled")
+        self._type_checking_enabled.setToolTip(
+            "Report invalid attributes and incompatible Python types while editing"
+        )
 
         form = QtWidgets.QFormLayout()
+        form.addRow("Autocomplete", self._autocomplete_enabled)
+        form.addRow("Type checking", self._type_checking_enabled)
         form.addRow("Font family", self._font_family)
         form.addRow("Font size", self._font_size)
 
@@ -87,11 +97,18 @@ class SettingsDialog(QtWidgets.QDialog):
         self._sections.setCurrentRow(0)
 
     def selected_preferences(self) -> EditorPreferences:
-        return EditorPreferences(self._font_family.currentFont().family(), self._font_size.value())
+        return EditorPreferences(
+            self._font_family.currentFont().family(),
+            self._font_size.value(),
+            self._autocomplete_enabled.isChecked(),
+            self._type_checking_enabled.isChecked(),
+        )
 
     def _set_preferences(self, preferences: EditorPreferences) -> None:
         self._font_family.setCurrentFont(QtGui.QFont(preferences.font_family))
         self._font_size.setValue(preferences.font_size)
+        self._autocomplete_enabled.setChecked(preferences.autocomplete_enabled)
+        self._type_checking_enabled.setChecked(preferences.type_checking_enabled)
         self._update_preview()
 
     def _restore_defaults(self) -> None:

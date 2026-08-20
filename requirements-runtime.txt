@@ -1,0 +1,3 @@
+jedi==0.20.0
+parso==0.8.7
+types-houdini==21.0.512.3

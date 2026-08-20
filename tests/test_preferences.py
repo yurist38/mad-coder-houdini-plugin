@@ -46,10 +46,12 @@ class PreferencesStoreTests(unittest.TestCase):
         self.store = PreferencesStore(self.backend, "Menlo", ["Menlo", "Roboto Mono"])
 
     def test_loads_defaults(self) -> None:
-        self.assertEqual(self.store.load(), EditorPreferences("Menlo", DEFAULT_FONT_SIZE))
+        self.assertEqual(
+            self.store.load(), EditorPreferences("Menlo", DEFAULT_FONT_SIZE, True, True)
+        )
 
-    def test_round_trips_font_preferences(self) -> None:
-        expected = EditorPreferences("Roboto Mono", 14)
+    def test_round_trips_preferences(self) -> None:
+        expected = EditorPreferences("Roboto Mono", 14, False, False)
 
         self.store.save(expected)
 
@@ -87,6 +89,26 @@ class PreferencesStoreTests(unittest.TestCase):
         self.backend.values[PreferencesStore.FONT_SIZE_KEY] = 100
 
         self.assertEqual(self.store.load().font_size, 32)
+
+    def test_loads_string_boolean_from_qsettings(self) -> None:
+        self.backend.values[PreferencesStore.AUTOCOMPLETE_ENABLED_KEY] = "false"
+
+        self.assertFalse(self.store.load().autocomplete_enabled)
+
+    def test_invalid_autocomplete_value_uses_enabled_default(self) -> None:
+        self.backend.values[PreferencesStore.AUTOCOMPLETE_ENABLED_KEY] = "sometimes"
+
+        self.assertTrue(self.store.load().autocomplete_enabled)
+
+    def test_loads_string_type_checking_boolean_from_qsettings(self) -> None:
+        self.backend.values[PreferencesStore.TYPE_CHECKING_ENABLED_KEY] = "false"
+
+        self.assertFalse(self.store.load().type_checking_enabled)
+
+    def test_invalid_type_checking_value_uses_enabled_default(self) -> None:
+        self.backend.values[PreferencesStore.TYPE_CHECKING_ENABLED_KEY] = "sometimes"
+
+        self.assertTrue(self.store.load().type_checking_enabled)
 
 
 if __name__ == "__main__":

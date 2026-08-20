@@ -62,8 +62,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Install pinned Ruff
-        run: python -m pip install ruff==0.16.0
+      - name: Install bundled runtime dependencies
+        run: python -m pip install -r requirements-runtime.txt ruff==0.16.0 ty==0.0.72
       - name: Build release archive
         run: python scripts/build_release.py --version "${RELEASE_TAG}" --platform "${{ matrix.platform }}"
       - uses: actions/upload-artifact@v4
