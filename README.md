@@ -2,7 +2,8 @@
 
 ![Mad Coder logo](mad-coder/config/Icons/MAD_mad_coder.svg)
 
-Mad Coder is a dockable Python editor for SideFX Houdini with live Ruff diagnostics and formatting.
+Mad Coder is a dockable Python editor for SideFX Houdini with Python autocomplete, live Ruff
+linting, ty type diagnostics, and formatting.
 It edits the current scene's `hou.session` module, Python code parameters on selected nodes, and
 the `PythonModule` and `ViewerStateModule` sections of selected Houdini digital assets without
 modifying Houdini's internal editor widgets.
@@ -13,7 +14,9 @@ modifying Houdini's internal editor widgets.
 
 - Native dockable Python Panel built with Houdini's bundled PySide6
 - Python syntax highlighting, line numbers, automatic indentation, and persistent font settings
+- Context-aware Python and Houdini autocomplete powered by Jedi
 - Debounced Ruff linting that never blocks Houdini's UI
+- Background Python and Houdini API type checking powered by ty
 - Full-line error/warning highlights with precise underlines and hover text
 - Navigable Problems list
 - Ruff formatting
@@ -93,7 +96,8 @@ interactive smoke-test checklist.
    │   └── mad-coder.json
    └── mad-coder/
        ├── bin/
-       │   └── ruff[.exe]
+       │   ├── ruff[.exe]
+       │   └── ty[.exe]
        ├── python_panels/
        └── scripts/python/mad_coder/
    ```
@@ -104,8 +108,8 @@ Houdini's package system loads the plugin; `houdini.env` does not need to be edi
 
 ### macOS security prompt
 
-macOS may quarantine the bundled Ruff executable and prevent linting from starting, or repeatedly
-delay the editor while checking the executable. After installing a trusted Mad Coder release, close
+macOS may quarantine the bundled Ruff or ty executables and prevent analysis from starting, or
+repeatedly delay the editor while checking them. After installing a trusted Mad Coder release, close
 Houdini and run this command in Terminal:
 
 ```shell
@@ -157,12 +161,12 @@ includes **Scene · hou.session**, so you can return to scene-level code at any 
 Mad Coder does not discard an unsaved buffer when selection changes. Save or reload first, then
 select the node again or click **Use Selected**.
 
-### Configure the editor font
+### Configure the editor
 
 Select **Settings…** in the Mad Coder toolbar, then open the **Editor** section. The settings window
-offers installed monospaced font families, a 7–32 pt size control, a live code preview, and
-**Restore Defaults**. Select **OK** to apply and persist the choice; **Cancel** leaves the editor
-unchanged.
+offers autocomplete and type-checking toggles, installed monospaced font families, a 7–32 pt size
+control, a live code preview, and **Restore Defaults**. Autocomplete and type checking are enabled
+by default. Select **OK** to apply and persist the choices; **Cancel** leaves the editor unchanged.
 
 Mad Coder prefers **Roboto Mono** as its default when that font is installed. It does not bundle the
 font, so systems without Roboto Mono use Qt's platform fixed-width font instead, such as Menlo on
@@ -170,7 +174,9 @@ macOS or Consolas on Windows. `Ctrl` + mouse wheel remains available for tempora
 
 ### Editing workflow
 
-- Type normally; linting runs after a short pause.
+- Type normally; linting and type checking run after a short pause.
+- Type `.` to open context-aware suggestions, or press `Ctrl+Space` to
+  request suggestions explicitly. Use Tab or Enter to accept and Escape to close the popup.
 - Hover over an underlined range to read its diagnostic.
 - Click a row in **Problems** to jump to its location.
 - Select **Format** to apply Ruff formatting to the editor buffer.
@@ -226,10 +232,53 @@ Coder's console.
 | Action | Shortcut |
 | --- | --- |
 | Save | Platform-standard Save (`Ctrl+S` / `Cmd+S`) |
+| Request autocomplete | `Ctrl+Space` |
 | Run and show Console | `Ctrl+Enter` / `Cmd+Enter` |
 | Format | `Ctrl+Shift+F` |
 | Reload | `F5` |
 | Temporarily zoom editor font | `Ctrl` + mouse wheel |
+
+## Autocomplete behavior
+
+Autocomplete runs Jedi in a serialized background worker, so the first analysis of a module does
+not block Houdini's UI. Typing a dot requests semantic candidates; after the popup opens, further
+typing is filtered locally. `Ctrl+Space` requests candidates at any cursor position.
+Disable **Autocomplete** under **Settings… → Editor** to turn off both triggers. The setting is
+enabled by default and persists between Houdini sessions.
+
+Release archives include pinned Jedi and Parso versions plus Houdini 21 type stubs. The active
+source context is supplied only to the analyzer, allowing completion for Houdini-provided globals
+such as `hou` and `kwargs` without inserting imports into saved code. The Houdini stubs also provide
+a useful baseline in Houdini 22; APIs added after Houdini 21 may not appear until the bundled stubs
+are updated. Dynamic HDA members and dynamically populated `kwargs` values cannot always be
+inferred.
+
+Autocomplete uses static analysis and does not execute the editor buffer or inspect live Houdini
+objects. If Jedi is unavailable in a source checkout, the editor remains usable; explicit
+autocomplete reports how to install the missing runtime dependencies.
+
+## Type-checking behavior
+
+Release archives contain a pinned [ty](https://docs.astral.sh/ty/) executable. Mad Coder runs it in
+an asynchronous child process and merges its results into the same inline markers and Problems list
+as Ruff. For example, `"some string".notexistingmethod` reports an unresolved attribute.
+
+Type checking is enabled by default. Disable **Type checking** under **Settings… → Editor** to use
+Ruff diagnostics only; the choice persists between Houdini sessions. ty receives the same
+analysis-only `hou` and `kwargs` context as autocomplete, and uses the bundled Houdini stubs to
+check HOM calls such as `hou.node("/")`. No imports or declarations are inserted into saved code.
+
+This is static analysis: dynamically added HDA members, runtime monkey-patching, and dynamically
+populated `kwargs` values can produce incomplete results. ty's `unresolved-reference` and syntax
+reports are left to Ruff so the Problems list does not show duplicate diagnostics.
+
+To use another ty executable, set this environment variable before Houdini starts:
+
+```text
+MAD_CODER_TY=/absolute/path/to/ty
+```
+
+The resolution order is explicit environment variable, bundled executable, then system `PATH`.
 
 ## Linting behavior
 
@@ -271,6 +320,20 @@ The bundled Ruff executable is missing, quarantined, or cannot execute. Reinstal
 platform archive. On macOS, check the operating system's security prompt; on Linux, confirm the
 executable bit was preserved. An explicit `MAD_CODER_RUFF` path can override it.
 
+### The lint badge says “ty unavailable”
+
+The bundled type-checker executable is missing, quarantined, or cannot execute. Reinstall the
+correct platform archive. On macOS, apply the security step above. You can also disable type
+checking in Settings or provide an explicit `MAD_CODER_TY` path.
+
+### Python suggestions work but `hou.` suggestions are missing
+
+Release archives include Houdini API stubs, and a normal `hou.` request should show HOM functions
+and classes. After replacing Mad Coder files while Houdini is open, fully quit and restart Houdini;
+Jedi and Python cache imported packages and stub discovery for the lifetime of the process. If the
+problem remains after restarting, reinstall the complete release archive so the
+`scripts/python/hou-stubs` directory is present.
+
 ### Save fails
 
 Read the status line for the error reported by Houdini. Correct any syntax diagnostic and save
@@ -286,9 +349,9 @@ inside Houdini's native editor.
 
 - Node discovery currently recognizes common Python code parameter names and HDA `PythonModule`
   and `ViewerStateModule` sections; HDA event-handler sections are not yet included.
-- There is no code completion, type checking, refactoring, or language-server integration yet.
-- Context globals are recognized as defined names, but Ruff does not validate Houdini API member
-  names or infer HOM return types.
+- Autocomplete and type checking are static and do not inspect live Houdini objects, so dynamic HDA
+  members and dynamically populated `kwargs` values may be incomplete.
+- There is no refactoring or language-server integration yet.
 - Ruff fixes are shown as fixable diagnostics but are not individually applied; Format formats the
   complete buffer.
 - The syntax highlighter is intentionally lightweight and is not a full Python parser.
@@ -308,5 +371,5 @@ publishes the platform archives.
 
 ## License
 
-Mad Coder is released under the [MIT License](LICENSE). Release archives bundle Ruff;
+Mad Coder is released under the [MIT License](LICENSE). Release archives bundle Ruff and ty;
 see [third-party notices](THIRD_PARTY_NOTICES.md).

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add configurable background Python autocomplete for local code, Houdini APIs, and source-context
+  globals, enabled by default.
+- Add configurable background ty diagnostics for Python values and Houdini APIs, enabled by default.
 - Add a source selector for `hou.session`, selected-node Python parameters, and HDA
   `PythonModule` sections.
 - Add Follow Selection and Use Selected workflows.
@@ -15,6 +18,8 @@
 - Highlight complete error and warning lines while retaining precise diagnostic underlines.
 - Add persistent Editor font settings with monospaced selection, sizing, preview, and defaults.
 - Focus the code editor and place the caret on the first click.
+- Keep completion suggestions inside a non-focusable editor child view so filtering never captures
+  keyboard input.
 
 All notable changes will be documented here.
 

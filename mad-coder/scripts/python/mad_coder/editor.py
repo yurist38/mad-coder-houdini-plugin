@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets  # type: ignore[import-not-found]
 
+from .completion import CompletionItem, completion_prefix
 from .diagnostics import Diagnostic
 from .highlighter import PythonHighlighter
 
@@ -23,11 +24,37 @@ class LineNumberArea(QtWidgets.QWidget):
 class MadCoderEditor(QtWidgets.QPlainTextEdit):
     """Python-oriented text editor that remains native to Houdini's Qt UI."""
 
+    completion_requested = QtCore.Signal(bool)
+
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._line_area = LineNumberArea(self)
         self._diagnostics: list[Diagnostic] = []
         self._highlighter = PythonHighlighter(self.document())
+        self._completion_request_block = -1
+        self._completion_request_position = -1
+        self._completion_was_explicit = False
+        self._autocomplete_enabled = True
+        self._completion_items: list[CompletionItem] = []
+
+        self._completion_model = QtGui.QStandardItemModel(self)
+        completion_popup = QtWidgets.QTreeView(self.viewport())
+        self._completion_popup = completion_popup
+        completion_popup.setModel(self._completion_model)
+        completion_popup.setRootIsDecorated(False)
+        completion_popup.setAlternatingRowColors(True)
+        completion_popup.setUniformRowHeights(True)
+        completion_popup.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        completion_popup.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        completion_popup.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
+        completion_popup.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        completion_popup.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        completion_popup.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        completion_popup.header().hide()
+        completion_popup.clicked.connect(self._insert_completion)
+        completion_popup.hide()
 
         font = QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont)
         self.set_code_font(font.family(), 11)
@@ -49,6 +76,17 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
         self._update_line_number_width()
         self._line_area.update()
 
+    @property
+    def autocomplete_enabled(self) -> bool:
+        return self._autocomplete_enabled
+
+    def set_autocomplete_enabled(self, enabled: bool) -> None:
+        """Enable or disable all automatic and explicit completion requests."""
+
+        self._autocomplete_enabled = enabled
+        if not enabled:
+            self.hide_completions()
+
     def line_number_area_width(self) -> int:
         digits = max(2, len(str(max(1, self.blockCount()))))
         return 10 + self.fontMetrics().horizontalAdvance("9") * digits
@@ -65,6 +103,7 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
             self._update_line_number_width()
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: N802 - Qt API
+        self.hide_completions()
         super().resizeEvent(event)
         contents = self.contentsRect()
         self._line_area.setGeometry(
@@ -166,6 +205,7 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
         self.setExtraSelections(selections)
 
     def go_to(self, line: int, column: int = 1) -> None:
+        self.hide_completions()
         block = self.document().findBlockByNumber(max(0, line - 1))
         if not block.isValid():
             return
@@ -197,11 +237,55 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
         super().mouseMoveEvent(event)
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802 - Qt API
+        self.hide_completions()
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
             self.setFocus(QtCore.Qt.FocusReason.MouseFocusReason)
         super().mousePressEvent(event)
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:  # noqa: N802 - Qt API
+        popup_visible = self._completion_popup.isVisible()
+        if popup_visible:
+            if event.key() == QtCore.Qt.Key.Key_Escape:
+                self.hide_completions()
+                event.accept()
+                return
+            if event.key() in (
+                QtCore.Qt.Key.Key_Enter,
+                QtCore.Qt.Key.Key_Return,
+                QtCore.Qt.Key.Key_Tab,
+            ):
+                self._insert_current_completion()
+                event.accept()
+                return
+            if event.key() in (QtCore.Qt.Key.Key_Up, QtCore.Qt.Key.Key_Backtab):
+                self._move_completion_selection(-1)
+                event.accept()
+                return
+            if event.key() == QtCore.Qt.Key.Key_Down:
+                self._move_completion_selection(1)
+                event.accept()
+                return
+            if event.key() == QtCore.Qt.Key.Key_PageUp:
+                self._move_completion_selection(-10)
+                event.accept()
+                return
+            if event.key() == QtCore.Qt.Key.Key_PageDown:
+                self._move_completion_selection(10)
+                event.accept()
+                return
+
+        completion_modifiers = (
+            QtCore.Qt.KeyboardModifier.ControlModifier,
+            QtCore.Qt.KeyboardModifier.MetaModifier,
+        )
+        explicit_completion = (
+            event.key() == QtCore.Qt.Key.Key_Space and event.modifiers() in completion_modifiers
+        )
+        if explicit_completion:
+            self._request_completions(explicit=True)
+            event.accept()
+            return
+
         if event.key() == QtCore.Qt.Key.Key_Tab and not event.modifiers():
             self.insertPlainText(" " * 4)
             return
@@ -214,7 +298,141 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
             super().keyPressEvent(event)
             self.insertPlainText(indentation)
             return
+
+        typed_dot = event.text() == "." and not event.modifiers()
         super().keyPressEvent(event)
+
+        if typed_dot and not self.isReadOnly():
+            self.hide_completions()
+            self._request_completions(explicit=False)
+            return
+        if popup_visible:
+            self._refresh_completion_prefix()
+
+    def _request_completions(self, *, explicit: bool) -> None:
+        if self.isReadOnly() or not self._autocomplete_enabled:
+            return
+        cursor = self.textCursor()
+        self._completion_request_block = cursor.blockNumber()
+        self._completion_request_position = cursor.position()
+        self._completion_was_explicit = explicit
+        self.completion_requested.emit(explicit)
+
+    def show_completions(self, items: list[CompletionItem]) -> None:
+        """Display completion candidates at the current text cursor."""
+
+        cursor = self.textCursor()
+        if (
+            not self._autocomplete_enabled
+            or self.isReadOnly()
+            or not items
+            or cursor.blockNumber() != self._completion_request_block
+            or cursor.position() < self._completion_request_position
+        ):
+            self.hide_completions()
+            return
+
+        prefix = completion_prefix(cursor.block().text(), cursor.positionInBlock())
+        self._completion_items = items
+        if not self._populate_completion_model(prefix):
+            self.hide_completions()
+            return
+
+        self._show_completion_popup()
+
+    def _populate_completion_model(self, prefix: str) -> bool:
+        matching_items = [
+            item
+            for item in self._completion_items
+            if item.name.casefold().startswith(prefix.casefold())
+        ]
+
+        self._completion_model.clear()
+        for item in matching_items:
+            name = QtGui.QStandardItem(item.name)
+            name.setToolTip(item.description)
+            kind = QtGui.QStandardItem(item.kind)
+            kind.setForeground(self.palette().color(QtGui.QPalette.ColorRole.PlaceholderText))
+            description = QtGui.QStandardItem(item.description)
+            description.setForeground(
+                self.palette().color(QtGui.QPalette.ColorRole.PlaceholderText)
+            )
+            self._completion_model.appendRow([name, kind, description])
+        return bool(matching_items)
+
+    def _show_completion_popup(self) -> None:
+        popup = self._completion_popup
+        popup.resizeColumnToContents(0)
+        popup.resizeColumnToContents(1)
+        popup.resizeColumnToContents(2)
+        popup.setCurrentIndex(self._completion_model.index(0, 0))
+
+        natural_width = sum(popup.sizeHintForColumn(column) for column in range(3)) + 32
+        available_width = max(1, self.viewport().width())
+        width = min(max(320, natural_width), available_width)
+        row_height = max(popup.sizeHintForRow(0), self.fontMetrics().height() + 6)
+        height = min(10, self._completion_model.rowCount()) * row_height + popup.frameWidth() * 2
+        cursor_rectangle = self.cursorRect()
+        x = max(0, min(cursor_rectangle.left(), available_width - width))
+        below = cursor_rectangle.bottom() + 1
+        y = (
+            below
+            if below + height <= self.viewport().height()
+            else max(0, cursor_rectangle.top() - height)
+        )
+        popup.setGeometry(x, y, width, height)
+        popup.show()
+        popup.raise_()
+
+    def hide_completions(self) -> None:
+        self._completion_popup.hide()
+        self._completion_items = []
+        self._completion_model.clear()
+        self._completion_request_block = -1
+        self._completion_request_position = -1
+
+    def _refresh_completion_prefix(self) -> None:
+        cursor = self.textCursor()
+        block_text = cursor.block().text()
+        column = cursor.positionInBlock()
+        prefix = completion_prefix(block_text, column)
+        follows_dot = column > len(prefix) and block_text[column - len(prefix) - 1] == "."
+        if not prefix and not follows_dot and not self._completion_was_explicit:
+            self.hide_completions()
+            return
+        if not self._populate_completion_model(prefix):
+            self.hide_completions()
+            return
+        self._show_completion_popup()
+
+    def _move_completion_selection(self, offset: int) -> None:
+        row_count = self._completion_model.rowCount()
+        if not row_count:
+            return
+        current_row = self._completion_popup.currentIndex().row()
+        next_row = max(0, min(row_count - 1, current_row + offset))
+        index = self._completion_model.index(next_row, 0)
+        self._completion_popup.setCurrentIndex(index)
+        self._completion_popup.scrollTo(index)
+
+    def _insert_current_completion(self) -> None:
+        index = self._completion_popup.currentIndex()
+        if index.isValid():
+            self._insert_completion(index)
+
+    def _insert_completion(self, index: QtCore.QModelIndex) -> None:
+        completion = str(index.sibling(index.row(), 0).data())
+        cursor = self.textCursor()
+        prefix = completion_prefix(cursor.block().text(), cursor.positionInBlock())
+        cursor.movePosition(
+            QtGui.QTextCursor.MoveOperation.Left,
+            QtGui.QTextCursor.MoveMode.KeepAnchor,
+            len(prefix),
+        )
+        cursor.insertText(completion)
+        self.setTextCursor(cursor)
+        self.hide_completions()
+        self.setFocus(QtCore.Qt.FocusReason.OtherFocusReason)
 
     def wheelEvent(self, event: QtGui.QWheelEvent) -> None:  # noqa: N802 - Qt API
         if event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
@@ -225,4 +443,5 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
             self._update_line_number_width()
             event.accept()
             return
+        self.hide_completions()
         super().wheelEvent(event)

@@ -21,10 +21,12 @@ class SettingsBackend(Protocol):
 
 @dataclass(frozen=True)
 class EditorPreferences:
-    """Configurable editor appearance."""
+    """Configurable editor appearance and behavior."""
 
     font_family: str
     font_size: int
+    autocomplete_enabled: bool = True
+    type_checking_enabled: bool = True
 
 
 def default_font_family(available_families: list[str], system_fixed_family: str) -> str:
@@ -39,6 +41,8 @@ class PreferencesStore:
 
     FONT_FAMILY_KEY = "editor/font_family"
     FONT_SIZE_KEY = "editor/font_size"
+    AUTOCOMPLETE_ENABLED_KEY = "autocomplete/enabled"
+    TYPE_CHECKING_ENABLED_KEY = "type_checking/enabled"
 
     def __init__(
         self,
@@ -48,7 +52,9 @@ class PreferencesStore:
     ) -> None:
         self._backend = backend
         self._available_families = {family.casefold(): family for family in available_families}
-        self.default = EditorPreferences(self._validated_font_family(default_family), DEFAULT_FONT_SIZE)
+        self.default = EditorPreferences(
+            self._validated_font_family(default_family), DEFAULT_FONT_SIZE, True, True
+        )
 
     def _validated_font_family(self, family: str) -> str:
         normalized_family = family.casefold()
@@ -66,10 +72,39 @@ class PreferencesStore:
         except (TypeError, ValueError):
             size = self.default.font_size
         size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, size))
-        return EditorPreferences(family, size)
+
+        raw_autocomplete = self._backend.value(
+            self.AUTOCOMPLETE_ENABLED_KEY, self.default.autocomplete_enabled
+        )
+        autocomplete_enabled = self._validated_boolean(
+            raw_autocomplete, self.default.autocomplete_enabled
+        )
+        raw_type_checking = self._backend.value(
+            self.TYPE_CHECKING_ENABLED_KEY, self.default.type_checking_enabled
+        )
+        type_checking_enabled = self._validated_boolean(
+            raw_type_checking, self.default.type_checking_enabled
+        )
+        return EditorPreferences(family, size, autocomplete_enabled, type_checking_enabled)
+
+    @staticmethod
+    def _validated_boolean(value: Any, default: bool) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int):
+            return value != 0
+        if isinstance(value, str):
+            normalized = value.strip().casefold()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+        return default
 
     def save(self, preferences: EditorPreferences) -> None:
         family = self._validated_font_family(preferences.font_family)
         size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, preferences.font_size))
         self._backend.setValue(self.FONT_FAMILY_KEY, family)
         self._backend.setValue(self.FONT_SIZE_KEY, size)
+        self._backend.setValue(self.AUTOCOMPLETE_ENABLED_KEY, preferences.autocomplete_enabled)
+        self._backend.setValue(self.TYPE_CHECKING_ENABLED_KEY, preferences.type_checking_enabled)

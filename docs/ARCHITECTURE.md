@@ -19,16 +19,23 @@ Houdini package JSON
       ├── capture_execution → stream, logging, timing, and traceback capture
       ├── PreferencesStore / SettingsDialog → validated persistent user settings
       ├── PythonHighlighter → dependency-free token highlighting
-      └── RuffService → asynchronous lint and format subprocesses
+      ├── CompletionService → serialized background Jedi analysis
+      ├── RuffService → asynchronous lint and format subprocesses
+      └── TypeCheckService → asynchronous ty subprocesses
 ```
 
 ## UI thread policy
 
 All widgets, source execution, node cooking, and `hou` calls stay on Houdini's main thread. This is
 required for the live Houdini scene, but means arbitrary user code can block the application. Ruff
-work runs in a `QProcess`, so linting does not execute on the UI thread and does not require calling
-`hou` from a worker. Results return through Qt signals. Starting a new lint pass invalidates or
-terminates the preceding pass.
+and ty work run in `QProcess` instances, so analysis does not execute on the UI thread and does not
+require calling `hou` from a worker. Results return through Qt signals. Starting a new analysis pass
+invalidates or terminates the preceding pass, and the panel publishes only a complete current pair.
+
+Jedi completion runs on one dedicated `QThread`. Requests are serialized because Jedi's fast parser
+is not thread-safe, and generation numbers discard results made stale by a newer request or source
+reload. The worker receives plain strings and cursor coordinates and never receives or calls a live
+`hou` object. UI presentation and text insertion return to Houdini's main thread through Qt signals.
 
 ## Source consistency
 
@@ -71,6 +78,32 @@ the editor. The contexts deliberately remain source-specific to avoid hiding gen
 names. A future settings UI can expose rules or configuration files, but it should preserve
 deterministic defaults and report the active configuration clearly.
 
+## Type-checker boundary
+
+ty is also a native external executable. `TypeCheckService` writes a temporary analysis copy of the
+buffer, launches ty with GitLab JSON output, maps its positions back to editor lines, and removes the
+temporary directory when the request finishes or is cancelled. The buffer is never executed.
+
+An analysis-only prelude imports `hou` and declares other documented context globals. Existing
+`__future__` imports remain first in the temporary module, and the line offset is removed from every
+reported diagnostic. The bundled `types-houdini` search path resolves HOM APIs. Ruff remains
+responsible for syntax and undefined-name reports to prevent duplicate Problems entries.
+
+## Completion boundary
+
+Completion uses Jedi's static `Script` API rather than its live `Interpreter` API. A short
+analysis-only prelude declares the documented globals for the active source adapter, and the cursor
+line is adjusted by that prelude's length. The prelude is never displayed, executed, linted, or
+saved. Pinned `types-houdini` stubs provide HOM names and signatures without introspecting Houdini's
+runtime extension module.
+
+Typing a dot or requesting completion explicitly starts an analysis pass. Once candidates arrive,
+the editor filters them locally as the user continues typing. Suggestions use a non-focusable child
+view inside the editor rather than a native Qt popup, so showing and hiding them cannot redirect
+keyboard input away from the text buffer. This avoids scheduling a Jedi pass for every keystroke.
+Dynamic scene values, HDA-generated attributes, and arbitrary `kwargs` contents remain best-effort
+because static analysis cannot safely discover them.
+
 ## Execution boundary
 
 `capture_execution` temporarily redirects Python stdout and stderr and adds a root logging handler.
@@ -85,10 +118,12 @@ section. A read-only source skips saving and executes its stored code where supp
 
 ## User preferences
 
-The sectioned `SettingsDialog` currently exposes the Editor font family and size. Its font picker is
-restricted to fonts Qt identifies as monospaced. `PreferencesStore` contains no Qt dependency and
-validates values read from an injected QSettings-compatible backend. The panel uses an explicitly
-named `QSettings("Mad Coder", "Mad Coder")` store so preferences are independent of Houdini's own
+The sectioned `SettingsDialog` exposes the Editor font family and size plus autocomplete and type
+checking toggles that default to enabled. Its font picker is restricted to fonts Qt identifies as
+monospaced.
+`PreferencesStore` contains no Qt dependency and validates values read from an injected
+QSettings-compatible backend. The panel uses an explicitly named
+`QSettings("Mad Coder", "Mad Coder")` store so preferences are independent of Houdini's own
 application settings.
 
 The default resolver prefers Roboto Mono when installed and otherwise uses Qt's system fixed-width
@@ -97,7 +132,11 @@ font. Missing saved fonts and malformed sizes fall back safely; sizes are clampe
 ## Failure behavior
 
 - Missing Ruff: standard-library syntax checking remains available.
+- Missing ty: Ruff remains available and the lint badge identifies type checking as unavailable.
+- Missing Jedi: editing remains available and explicit autocomplete reports the missing dependency.
+- Completion failure or stale result: the popup stays closed and the editor buffer is unchanged.
 - Ruff process failure: the editor stays usable and displays the process error in its status area.
+- ty process failure: Ruff results remain usable and the type-check error appears in the status area.
 - Invalid Python on save: Houdini rejects it and the buffer remains unsaved.
 - External source modification: the user chooses reload, overwrite, or cancel.
 - Locked or non-writable source: the source remains available in view-only mode.
