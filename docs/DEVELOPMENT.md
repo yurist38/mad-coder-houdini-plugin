@@ -7,6 +7,11 @@
 - Ruff 0.16.0 and BasedPyright 1.39.9 for repository checks
 - Git
 
+For VS Code diagnostics, install the recommended BasedPyright extension
+(`detachhead.basedpyright`). The repository settings select workspace-wide diagnostics and
+keep the type-checking mode aligned with `pyproject.toml`. Disable Pylance for this workspace
+so two Python language servers do not report competing diagnostics.
+
 PySide6 and `hou` are supplied by Houdini. They are deliberately not declared as installable
 Python dependencies because a separately installed Qt binding can conflict with Houdini's Qt
 runtime.

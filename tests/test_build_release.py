@@ -5,9 +5,13 @@ from pathlib import Path
 from unittest import mock
 
 SCRIPT_ROOT = Path(__file__).parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPT_ROOT))
+SCRIPT_ROOT_PATH = str(SCRIPT_ROOT)
+sys.path.insert(0, SCRIPT_ROOT_PATH)
 
-import build_release  # noqa: E402
+try:
+    import build_release  # noqa: E402
+finally:
+    sys.path.remove(SCRIPT_ROOT_PATH)
 
 
 class FakeDistribution:
@@ -21,12 +25,13 @@ class FakeDistribution:
 
 class LocateRuffTests(unittest.TestCase):
     def test_locates_binary_from_active_python_distribution(self) -> None:
+        executable_name = "ruff.exe" if sys.platform == "win32" else "ruff"
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            native_ruff = root / "bin" / "ruff"
+            native_ruff = root / "bin" / executable_name
             native_ruff.parent.mkdir(parents=True)
             native_ruff.write_bytes(b"native-ruff")
-            distribution = FakeDistribution(root, [Path("bin/ruff")])
+            distribution = FakeDistribution(root, [Path("bin") / executable_name])
 
             with mock.patch.object(
                 build_release.metadata,

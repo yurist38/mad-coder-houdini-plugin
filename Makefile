@@ -1,4 +1,4 @@
-PYTHON ?= python
+PYTHON ?= python3
 RUFF_VERSION ?= 0.16.0
 PLATFORM ?= macos-arm64
 VERSION ?= 0.0.0-dev
