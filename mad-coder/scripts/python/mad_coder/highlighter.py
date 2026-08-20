@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import keyword
 
-from PySide6 import QtCore, QtGui
+from PySide6 import QtCore, QtGui  # type: ignore[import-not-found]
 
 
 class PythonHighlighter(QtGui.QSyntaxHighlighter):

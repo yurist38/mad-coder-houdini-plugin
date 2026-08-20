@@ -16,7 +16,7 @@ class PackageTests(unittest.TestCase):
         panel = ROOT / "mad-coder" / "python_panels" / "mad_coder.pypanel"
         document = ET.parse(panel)
         interface = document.getroot().find("interface")
-        self.assertIsNotNone(interface)
+        assert interface is not None
         self.assertEqual(interface.attrib["name"], "mad_coder")
         self.assertEqual(interface.attrib["icon"], "MAD_mad_coder.svg")
         icon = ROOT / "mad-coder" / "config" / "Icons" / interface.attrib["icon"]

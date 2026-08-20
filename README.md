@@ -4,8 +4,8 @@
 
 Mad Coder is a dockable Python editor for SideFX Houdini with live Ruff diagnostics and formatting.
 It edits the current scene's `hou.session` module, Python code parameters on selected nodes, and
-the `PythonModule` section of selected Houdini digital assets without modifying Houdini's internal
-editor widgets.
+the `PythonModule` and `ViewerStateModule` sections of selected Houdini digital assets without
+modifying Houdini's internal editor widgets.
 
 ![Mad Coder preview](docs/images/mad-coder-preview.jpg)
 
@@ -18,7 +18,7 @@ editor widgets.
 - Navigable Problems list
 - Ruff formatting
 - Built-in console for captured `print`, standard error, logging, and tracebacks
-- Context-aware Run action for scene, node, and HDA code
+- Context-aware Run action for scene, node, HDA, and Python Viewer State code
 - Save and reload shortcuts
 - Protection against overwriting changes made through another editor
 - Follow Selection mode for opening supported code from the selected node
@@ -41,10 +41,10 @@ Linux ARM are outside the initial support scope.
 
 ## Local development
 
-From a checkout, install the pinned Ruff version and run the repository checks:
+From a checkout with Python 3.11+, install the pinned checks and run them:
 
 ```shell
-make install-ruff
+make install-checks
 make check
 ```
 
@@ -147,8 +147,8 @@ contains unsaved changes.
 1. Leave **Follow Selection** enabled.
 2. Select a Python node, such as a Python SOP, in a network editor.
 3. Mad Coder opens the node's supported Python parameter automatically.
-4. If the node is a digital asset with a `PythonModule` section, choose that section from the
-   source selector when you want to edit the asset module instead.
+4. If the node is a digital asset with a `PythonModule` or `ViewerStateModule` section, choose it
+   from the source selector when you want to edit that embedded module instead.
 
 The last selected node is used when multiple nodes are selected. **Use Selected** performs the same
 lookup on demand, which is useful when Follow Selection is disabled. The source selector always
@@ -178,9 +178,10 @@ macOS or Consolas on Windows. `Ctrl` + mouse wheel remains available for tempora
 - Select **Run** to save, execute in the source's Houdini context, and open captured output.
 - Select **Reload** to discard the buffer and read the current source again.
 
-Node-parameter changes are grouped as a Houdini undo operation. Saving a `PythonModule` changes
-the digital asset definition and therefore affects every instance of that asset. Asset definitions
-in non-writable libraries and locked node parameters are opened view-only.
+Node-parameter changes are grouped as a Houdini undo operation. Saving a `PythonModule` or
+`ViewerStateModule` changes the digital asset definition and therefore affects every instance of
+that asset. Asset definitions in non-writable libraries and locked node parameters are opened
+view-only.
 
 Saving `hou.session` calls Houdini's `hou.setSessionModuleSource`. Houdini makes the new module
 contents available immediately, so top-level code executes as part of applying the source. Changing
@@ -206,6 +207,8 @@ Run applies the current buffer before executing it:
 - `hou.session` is applied and evaluated by Houdini.
 - An HDA `PythonModule` is saved and loaded. Modules that only define functions may produce no
   output until another callback invokes those functions.
+- An HDA `ViewerStateModule` is saved and reloaded with Houdini's embedded viewer-state API, making
+  the updated state available without restarting Houdini.
 - A view-only node source can be cooked without changing its stored code.
 
 Run is not a sandbox or a full debugger. It executes inside Houdini's main process. Long-running or
@@ -214,7 +217,9 @@ arbitrary Python code. Save the scene before running unfamiliar code.
 
 The console captures synchronous Python output during the Run operation. Native Houdini/C++ output,
 subprocess output, and messages emitted later by background threads may still appear only in
-Houdini's normal console or Python Shell.
+Houdini's normal console or Python Shell. This also means output from Viewer State event callbacks
+that occur after Run appears in Houdini's Viewer State Browser or Python Shell rather than in Mad
+Coder's console.
 
 ### Shortcuts
 
@@ -235,8 +240,8 @@ hundreds of style rules enabled by Ruff 0.16's expanded defaults.
 
 Mad Coder supplies Ruff with the documented globals for the active Houdini source context. It
 recognizes `hou` in scene and Python SOP code, and recognizes both `hou` and `kwargs` in Python
-Snippet SOP and HDA `PythonModule` code. These names are configured only for linting; Mad Coder does
-not insert imports or alter the saved source.
+Snippet SOP, HDA `PythonModule`, and HDA `ViewerStateModule` code. These names are configured only
+for linting; Mad Coder does not insert imports or alter the saved source.
 
 Ruff runs in isolated mode, so an unrelated `pyproject.toml` in Houdini's working directory cannot
 silently change the editor's rules. If Ruff cannot be found, the panel remains usable and reports
@@ -279,8 +284,8 @@ inside Houdini's native editor.
 
 ## Current limitations
 
-- Node discovery currently recognizes common Python code parameter names and HDA
-  `PythonModule`; HDA event-handler sections are not yet included.
+- Node discovery currently recognizes common Python code parameter names and HDA `PythonModule`
+  and `ViewerStateModule` sections; HDA event-handler sections are not yet included.
 - There is no code completion, type checking, refactoring, or language-server integration yet.
 - Context globals are recognized as defined names, but Ruff does not validate Houdini API member
   names or infer HOM return types.

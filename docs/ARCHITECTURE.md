@@ -13,7 +13,7 @@ Houdini package JSON
       ├── Source adapters
       │   ├── SessionSource → hou.session
       │   ├── NodeParameterSource → selected-node string parameters
-      │   └── HDASectionSource → asset PythonModule sections
+      │   └── HDASectionSource → asset PythonModule and ViewerStateModule sections
       ├── MadCoderEditor → text editing, line numbers, inline diagnostic rendering
       ├── ExecutionConsole → captured Python output and run history
       ├── capture_execution → stream, logging, timing, and traceback capture
@@ -54,8 +54,9 @@ Source adapters expose the same conceptual contract:
 - `read_only_reason()`
 
 `python_sources_for_node` currently discovers common Python parameter names and an HDA
-`PythonModule` section. Likely future adapters include HDA event-handler sections and external
-files. The panel never switches adapters while the current buffer has unsaved changes.
+`PythonModule` and `ViewerStateModule` sections. Viewer states use Houdini's dedicated embedded
+module reload API. Likely future adapters include HDA event-handler sections and external files.
+The panel never switches adapters while the current buffer has unsaved changes.
 
 ## Linter boundary
 

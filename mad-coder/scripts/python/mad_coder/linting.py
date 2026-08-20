@@ -7,7 +7,7 @@ import os
 import shutil
 from pathlib import Path
 
-from PySide6 import QtCore
+from PySide6 import QtCore  # type: ignore[import-not-found]
 
 from .diagnostics import Diagnostic, parse_ruff_output
 from .ruff_config import check_arguments

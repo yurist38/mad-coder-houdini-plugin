@@ -6,6 +6,8 @@ import os
 import re
 from typing import Any, Protocol
 
+SUPPORTED_HDA_PYTHON_SECTIONS = ("PythonModule", "ViewerStateModule")
+
 
 class SourceConflictError(RuntimeError):
     """Raised when the backing source changed after it was loaded."""
@@ -51,7 +53,7 @@ class SessionSource:
     """Read and write the scene-local ``hou.session`` module."""
 
     display_name = "Scene · hou.session"
-    lint_builtins = ("hou",)
+    lint_builtins: tuple[str, ...] = ("hou",)
     lint_filename = "hou_session.py"
     placeholder = "# Python stored in hou.session"
     save_warning = ""
@@ -89,7 +91,7 @@ class NodeParameterSource:
         self.lint_filename = _filename(f"{node_path}_{parm_name}")
         self.placeholder = f"# Python stored in {node_path}/{parm_name}"
         self.source_key = f"parm:{node_path}:{parm_name}"
-        self.lint_builtins = ("hou",)
+        self.lint_builtins: tuple[str, ...] = ("hou",)
 
     def _resolve_node(self) -> Any:
         node = self._hou.node(self.node_path)
@@ -161,7 +163,7 @@ class HDASectionSource:
         node = self._resolve_node()
         type_name = node.type().name()
         self.display_name = f"Asset · {type_name} · {section_name}"
-        self.lint_builtins = ("hou", "kwargs")
+        self.lint_builtins: tuple[str, ...] = ("hou", "kwargs")
         self.lint_filename = _filename(f"{type_name}_{section_name}")
         self.placeholder = f"# {section_name} for {type_name}"
         self.save_warning = (
@@ -207,9 +209,14 @@ class HDASectionSource:
         return None
 
     def execute(self) -> None:
-        """Load the asset module after its section has been updated."""
+        """Reload the edited HDA module using its section-specific Houdini API."""
 
-        self._resolve_node().type().hdaModule()
+        node = self._resolve_node()
+        if self.section_name == "ViewerStateModule":
+            module = node.hdaViewerStateModule()
+            self._hou.hda.reloadHDAViewerStateModule(module)
+            return
+        node.type().hdaModule()
 
 
 def python_sources_for_node(node: Any, hou_module: Any | None = None) -> list[SourceAdapter]:
@@ -244,8 +251,11 @@ def python_sources_for_node(node: Any, hou_module: Any | None = None) -> list[So
 
     try:
         definition = node.type().definition()
-        if definition is not None and "PythonModule" in definition.sections():
-            sources.append(HDASectionSource(node_path, "PythonModule", hou_module))
+        if definition is not None:
+            sections = definition.sections()
+            for section_name in SUPPORTED_HDA_PYTHON_SECTIONS:
+                if section_name in sections:
+                    sources.append(HDASectionSource(node_path, section_name, hou_module))
     except Exception:
         pass
 
