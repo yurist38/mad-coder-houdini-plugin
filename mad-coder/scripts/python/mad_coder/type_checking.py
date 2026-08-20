@@ -64,6 +64,7 @@ class TypeCheckService(QtCore.QObject):
             self.check_ready.emit([], "Type checking unavailable")
             return
 
+        temporary: tempfile.TemporaryDirectory[str] | None = None
         try:
             # Ruff reports syntax errors. Avoid launching ty when it cannot perform
             # meaningful type analysis of the module.
@@ -73,6 +74,8 @@ class TypeCheckService(QtCore.QObject):
             source_path = Path(temporary.name) / _safe_filename(filename)
             source_path.write_text(source, encoding="utf-8")
         except (OSError, SyntaxError, ValueError) as exc:
+            if temporary is not None:
+                temporary.cleanup()
             if isinstance(exc, SyntaxError):
                 self.check_ready.emit([], "ty")
             else:

@@ -33,6 +33,10 @@ def _severity(code: str) -> str:
     return "error" if code == "invalid-syntax" or code.startswith(error_prefixes) else "warning"
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def parse_ruff_output(payload: str) -> list[Diagnostic]:
     """Convert Ruff's JSON output into stable application diagnostics."""
 
@@ -48,8 +52,8 @@ def parse_ruff_output(payload: str) -> list[Diagnostic]:
     for item in items:
         if not isinstance(item, dict):
             continue
-        location = item.get("location") or {}
-        end_location = item.get("end_location") or location
+        location = _as_dict(item.get("location"))
+        end_location = _as_dict(item.get("end_location")) or location
         line = _positive_int(location.get("row"), 1)
         column = _positive_int(location.get("column"), 1)
         end_line = _positive_int(end_location.get("row"), line)
@@ -86,9 +90,9 @@ def parse_ty_output(payload: str, line_offset: int = 0) -> list[Diagnostic]:
     for item in items:
         if not isinstance(item, dict):
             continue
-        positions = (item.get("location") or {}).get("positions") or {}
-        begin = positions.get("begin") or {}
-        end = positions.get("end") or begin
+        positions = _as_dict(_as_dict(item.get("location")).get("positions"))
+        begin = _as_dict(positions.get("begin"))
+        end = _as_dict(positions.get("end")) or begin
         generated_line = _positive_int(begin.get("line"), 1)
         line = generated_line - offset
         if line < 1:
