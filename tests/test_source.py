@@ -62,12 +62,20 @@ class FakeSection:
 
 
 class FakeDefinition:
-    def __init__(self, section: FakeSection | None = None, library: str = "Embedded") -> None:
-        self.section = section
+    def __init__(
+        self,
+        section: FakeSection | None = None,
+        library: str = "Embedded",
+        *,
+        sections: dict[str, FakeSection] | None = None,
+    ) -> None:
+        self._sections = dict(sections or {})
+        if section is not None:
+            self._sections.setdefault("PythonModule", section)
         self.library = library
 
     def sections(self) -> dict[str, FakeSection]:
-        return {"PythonModule": self.section} if self.section is not None else {}
+        return self._sections
 
     def libraryFilePath(self) -> str:
         return self.library
@@ -107,6 +115,7 @@ class FakeNode:
         self._editable_inside_locked_hda = editable_inside_locked_hda
         self.cooks: list[bool] = []
         self.cook_errors: tuple[str, ...] = ()
+        self.viewer_state_module = object()
 
     def path(self) -> str:
         return self._path
@@ -129,12 +138,24 @@ class FakeNode:
     def errors(self) -> tuple[str, ...]:
         return self.cook_errors
 
+    def hdaViewerStateModule(self) -> object:
+        return self.viewer_state_module
+
+
+class FakeHDA:
+    def __init__(self) -> None:
+        self.reloaded_viewer_state_modules: list[object] = []
+
+    def reloadHDAViewerStateModule(self, module: object) -> None:
+        self.reloaded_viewer_state_modules.append(module)
+
 
 class FakeHou:
     def __init__(self, source: str = "", nodes: list[FakeNode] | None = None) -> None:
         self.source = source
         self.nodes = {node.path(): node for node in nodes or []}
         self.undos = FakeUndos()
+        self.hda = FakeHDA()
 
     def sessionModuleSource(self) -> str:
         return self.source
@@ -243,6 +264,18 @@ class HDASectionSourceTests(unittest.TestCase):
 
         self.assertEqual(self.node.type().hda_module_loads, 1)
 
+    def test_executes_viewer_state_with_dedicated_reload_api(self) -> None:
+        viewer_state_section = FakeSection("def createViewerStateTemplate():\n    pass\n")
+        definition = FakeDefinition(sections={"ViewerStateModule": viewer_state_section})
+        node = FakeNode("/obj/state1", FakeNodeType("mad::state", definition))
+        hou = FakeHou(nodes=[node])
+        source = HDASectionSource("/obj/state1", "ViewerStateModule", hou)
+
+        source.execute()
+
+        self.assertEqual(hou.hda.reloaded_viewer_state_modules, [node.viewer_state_module])
+        self.assertEqual(node.type().hda_module_loads, 0)
+
     def test_detects_external_change(self) -> None:
         expected = self.section.source
         self.section.source = "external = True\n"
@@ -277,6 +310,24 @@ class SourceDiscoveryTests(unittest.TestCase):
         )
         self.assertEqual(sources[0].source_key, "parm:/obj/python1:python")
         self.assertEqual(sources[1].source_key, "hda:/obj/python1:PythonModule")
+
+    def test_discovers_viewer_state_module(self) -> None:
+        viewer_state_section = FakeSection("def createViewerStateTemplate():\n    pass\n")
+        node = FakeNode(
+            "/obj/state1",
+            FakeNodeType(
+                "mad::state",
+                FakeDefinition(sections={"ViewerStateModule": viewer_state_section}),
+            ),
+        )
+        hou = FakeHou(nodes=[node])
+
+        sources = python_sources_for_node(node, hou)
+
+        self.assertEqual(len(sources), 1)
+        self.assertIsInstance(sources[0], HDASectionSource)
+        self.assertEqual(sources[0].source_key, "hda:/obj/state1:ViewerStateModule")
+        self.assertEqual(sources[0].lint_builtins, ("hou", "kwargs"))
 
     def test_python_snippet_exposes_kwargs(self) -> None:
         node = FakeNode(

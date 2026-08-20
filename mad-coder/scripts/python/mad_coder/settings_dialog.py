@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6 import QtGui, QtWidgets
+from PySide6 import QtGui, QtWidgets  # type: ignore[import-not-found]
 
 from .preferences import (
     MAX_FONT_SIZE,

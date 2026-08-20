@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import cast
 
 import hou  # type: ignore[import-not-found]
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets  # type: ignore[import-not-found]
 
 from .console import ExecutionConsole
 from .diagnostics import Diagnostic

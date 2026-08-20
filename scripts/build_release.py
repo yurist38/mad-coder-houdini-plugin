@@ -14,10 +14,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def locate_ruff() -> Path:
-    executable = shutil.which("ruff")
-    if not executable:
-        raise RuntimeError("Ruff is required to build a release archive")
-    return Path(executable)
+    """Locate Ruff from the distribution installed for the active Python."""
+
+    try:
+        distribution = metadata.distribution("ruff")
+    except metadata.PackageNotFoundError as exc:
+        raise RuntimeError(
+            "Ruff must be installed in the active Python environment"
+        ) from exc
+
+    executable_name = "ruff.exe" if sys.platform == "win32" else "ruff"
+    for relative_path in distribution.files or ():
+        if relative_path.name != executable_name:
+            continue
+        executable = Path(str(distribution.locate_file(relative_path))).resolve()
+        if executable.is_file():
+            return executable
+    raise RuntimeError("Could not locate Ruff's executable in its installed distribution")
 
 
 def copy_ruff_license(destination: Path) -> None:
@@ -33,7 +46,7 @@ def copy_ruff_license(destination: Path) -> None:
     ]
     if not candidates:
         raise RuntimeError("Could not locate Ruff's license in the installed distribution")
-    source = Path(distribution.locate_file(candidates[0]))
+    source = Path(str(distribution.locate_file(candidates[0])))
     shutil.copy2(source, destination / "RUFF_LICENSE")
 
 

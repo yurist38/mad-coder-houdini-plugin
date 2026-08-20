@@ -1,0 +1,4 @@
+{
+  "basedpyright.analysis.diagnosticMode": "workspace",
+  "basedpyright.analysis.typeCheckingMode": "basic"
+}

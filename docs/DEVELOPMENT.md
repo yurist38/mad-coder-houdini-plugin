@@ -4,8 +4,13 @@
 
 - Houdini 21.0 or newer with Qt 6/PySide6 for interactive testing
 - Python 3.11 or newer for unit tests
-- Ruff 0.16.0 for repository checks and release builds
+- Ruff 0.16.0 and BasedPyright 1.39.9 for repository checks
 - Git
+
+For VS Code diagnostics, install the recommended BasedPyright extension
+(`detachhead.basedpyright`). The repository settings select workspace-wide diagnostics and
+keep the type-checking mode aligned with `pyproject.toml`. Disable Pylance for this workspace
+so two Python language servers do not report competing diagnostics.
 
 PySide6 and `hou` are supplied by Houdini. They are deliberately not declared as installable
 Python dependencies because a separately installed Qt binding can conflict with Houdini's Qt
@@ -43,12 +48,13 @@ The same commands are available through the repository `Makefile`:
 make check
 make lint
 make test
+make typecheck
 ```
 
-To install the pinned Ruff version:
+To install the pinned Ruff and Pyright versions:
 
 ```shell
-make install-ruff
+make install-checks
 ```
 
 The direct commands are:
@@ -57,10 +63,13 @@ The direct commands are:
 python -m compileall -q mad-coder/scripts/python scripts tests
 python -m unittest discover -s tests -v
 ruff check mad-coder/scripts/python scripts tests
+basedpyright
 ```
 
-Unit tests avoid importing `hou` and PySide6. Houdini integration still requires an interactive
-smoke test because SideFX does not distribute `hou` as a normal public Python package.
+Unit tests avoid importing `hou` and PySide6. BasedPyright checks the entire Python source tree; only
+imports supplied by Houdini are explicitly marked as environment-provided because SideFX does not
+distribute them as normal public Python packages. Houdini integration still requires an interactive
+smoke test.
 
 ## Interactive smoke test
 
@@ -78,20 +87,23 @@ Before releasing:
 8. Select an HDA with a `PythonModule`. Choose it in the source selector, save a harmless change,
    and confirm the definition change is visible from another instance. Confirm both `hou` and
    `kwargs` are accepted as context globals.
-9. Add `print`, standard-error, and logging output to a Python SOP. Select **Run** and confirm the
+9. Select an HDA with a `ViewerStateModule`. Choose it in the source selector, save a harmless
+   change, run it, and verify the embedded viewer state reloads without restarting Houdini.
+   Confirm both `hou` and `kwargs` are accepted as context globals.
+10. Add `print`, standard-error, and logging output to a Python SOP. Select **Run** and confirm the
    node cooks and every message appears in Console exactly once.
-10. Raise an exception and confirm its traceback and failed status appear in Console without
+11. Raise an exception and confirm its traceback and failed status appear in Console without
     closing the panel. Correct it and confirm a subsequent run succeeds.
-11. Make a buffer dirty, change node selection, and confirm Mad Coder does not discard the buffer.
-12. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
-13. Open a source in a non-writable HDA library and confirm it is view-only.
-14. Format deliberately irregular code and verify the cursor remains near its original position.
-15. Open **Settings…**, select another monospaced font and size, and confirm the preview and editor
+12. Make a buffer dirty, change node selection, and confirm Mad Coder does not discard the buffer.
+13. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
+14. Open a source in a non-writable HDA library and confirm it is view-only.
+15. Format deliberately irregular code and verify the cursor remains near its original position.
+16. Open **Settings…**, select another monospaced font and size, and confirm the preview and editor
     update. Close and reopen Houdini and confirm the choice persists.
-16. Use **Restore Defaults** and confirm Roboto Mono is selected when installed, or the platform
+17. Use **Restore Defaults** and confirm Roboto Mono is selected when installed, or the platform
     fixed-width font otherwise. Confirm Cancel does not apply a change.
-17. Load and clear scenes while the panel is open and verify source discovery refreshes.
-18. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
+18. Load and clear scenes while the panel is open and verify source discovery refreshes.
+19. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
    release.
 
 ## Build a release archive locally
@@ -116,8 +128,9 @@ python scripts/build_release.py --version 0.1.0 --platform macos-arm64
 ```
 
 Use `linux-x64`, `windows-x64`, or `macos-arm64` as appropriate. The builder copies the Ruff
-executable and its license into the ZIP under `dist/`. Never use a binary from one operating system
-to build another platform's archive.
+executable and its license into the ZIP under `dist/`. It resolves both directly from the Ruff
+distribution installed for the active Python interpreter, so shell launchers such as pyenv shims are
+never packaged. Never use a binary from one operating system to build another platform's archive.
 
 Inspect the ZIP before distribution. Its root must contain exactly the `packages` and `mad-coder`
 directories.
@@ -153,8 +166,8 @@ tagged source and retries publication without creating or moving a tag.
    generated notes and SHA-256 checksums.
 6. Download and inspect all three published archives.
 
-The CI workflow tests the minimum Python 3.11 runtime on every pull request and push to `master` or
-`main`.
+The CI workflow tests the minimum Python 3.11 runtime and runs Ruff and BasedPyright on every pull
+request and push to `master` or `main`.
 
 ## Versioning policy
 
