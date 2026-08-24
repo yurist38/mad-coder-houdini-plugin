@@ -43,7 +43,12 @@ def analysis_source(text: str, builtins: tuple[str, ...]) -> tuple[str, int]:
         if name == "hou":
             prelude.append("import hou as hou")
         elif name == "kwargs":
-            prelude.append("kwargs: dict[str, object] = {}")
+            prelude.extend(
+                [
+                    "from typing import Any as _MadCoderAny",
+                    "kwargs: dict[str, _MadCoderAny] = {}",
+                ]
+            )
         else:
             prelude.append(f"{name}: object")
 

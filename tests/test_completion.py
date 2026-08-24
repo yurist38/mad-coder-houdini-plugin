@@ -19,9 +19,12 @@ class AnalysisSourceTests(unittest.TestCase):
 
         self.assertEqual(
             source,
-            "import hou as hou\nkwargs: dict[str, object] = {}\nhou.no",
+            "import hou as hou\n"
+            "from typing import Any as _MadCoderAny\n"
+            "kwargs: dict[str, _MadCoderAny] = {}\n"
+            "hou.no",
         )
-        self.assertEqual(offset, 2)
+        self.assertEqual(offset, 3)
 
     def test_deduplicates_context_names(self) -> None:
         source, offset = analysis_source("hou.no", ("hou", "hou"))

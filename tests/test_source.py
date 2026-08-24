@@ -11,6 +11,7 @@ from mad_coder.source import (  # noqa: E402
     SessionSource,
     SourceConflictError,
     SourceUnavailableError,
+    code_sources_for_node,
     python_sources_for_node,
 )
 
@@ -35,10 +36,32 @@ class FakeUndos:
         return FakeUndoGroup(self, label)
 
 
+class FakeParmTemplate:
+    def __init__(self, tags: dict[str, str] | None = None) -> None:
+        self._tags = tags or {}
+
+    def tags(self) -> dict[str, str]:
+        return self._tags
+
+
 class FakeParm:
-    def __init__(self, source: str, *, locked: bool = False) -> None:
+    def __init__(
+        self,
+        source: str,
+        *,
+        locked: bool = False,
+        tags: dict[str, str] | None = None,
+    ) -> None:
         self.source = source
         self.locked = locked
+        self._name = ""
+        self._template = FakeParmTemplate(tags)
+
+    def name(self) -> str:
+        return self._name
+
+    def parmTemplate(self) -> FakeParmTemplate:  # noqa: N802 - Houdini API
+        return self._template
 
     def unexpandedString(self) -> str:
         return self.source
@@ -111,6 +134,8 @@ class FakeNode:
         self._path = path
         self._type = node_type
         self._parms = parms or {}
+        for name, parm in self._parms.items():
+            parm._name = name
         self._inside_locked_hda = inside_locked_hda
         self._editable_inside_locked_hda = editable_inside_locked_hda
         self.cooks: list[bool] = []
@@ -125,6 +150,9 @@ class FakeNode:
 
     def parm(self, name: str) -> FakeParm | None:
         return self._parms.get(name)
+
+    def parms(self) -> tuple[FakeParm, ...]:
+        return tuple(self._parms.values())
 
     def isInsideLockedHDA(self) -> bool:
         return self._inside_locked_hda
@@ -341,6 +369,37 @@ class SourceDiscoveryTests(unittest.TestCase):
 
         self.assertEqual(len(sources), 1)
         self.assertEqual(sources[0].lint_builtins, ("hou", "kwargs"))
+        self.assertEqual(sources[0].lint_ignores, ("F706",))
+
+    def test_discovers_vex_parameter_from_editor_language_tag(self) -> None:
+        snippet = FakeParm(
+            "@P += {1, 0, 0};\n",
+            tags={"editor": "1", "editorlang": "VEX"},
+        )
+        node = FakeNode(
+            "/obj/geo1/wrangle1",
+            FakeNodeType("attribwrangle"),
+            {"snippet": snippet},
+        )
+        hou = FakeHou(nodes=[node])
+
+        sources = code_sources_for_node(node, hou)
+
+        self.assertEqual(len(sources), 1)
+        self.assertIsInstance(sources[0], NodeParameterSource)
+        self.assertEqual(sources[0].language, "vex")
+        self.assertEqual(sources[0].lint_builtins, ())
+        self.assertTrue(sources[0].lint_filename.endswith(".vfl"))
+        self.assertEqual(sources[0].load(), "@P += {1, 0, 0};\n")
+
+    def test_ignores_other_tagged_expression_languages(self) -> None:
+        node = FakeNode(
+            "/obj/geo1/expression1",
+            FakeNodeType("expression"),
+            {"snippet": FakeParm("$F", tags={"editorlang": "HScript"})},
+        )
+
+        self.assertEqual(code_sources_for_node(node, FakeHou(nodes=[node])), [])
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ from .diagnostics import parse_ty_output
 from .type_analysis import type_analysis_source
 
 _RUFF_OWNED_CODES = {"ty:invalid-syntax", "ty:unresolved-reference"}
+_CHECK_TIMEOUT_MS = 10_000
 
 
 def find_ty() -> str | None:
@@ -49,7 +50,11 @@ class TypeCheckService(QtCore.QObject):
         super().__init__(parent)
         self.executable = find_ty()
         self._process: QtCore.QProcess | None = None
-        self._temporary: tempfile.TemporaryDirectory[str] | None = None
+        self._requests: dict[
+            QtCore.QProcess,
+            tuple[tempfile.TemporaryDirectory[str], int],
+        ] = {}
+        self._pending: tuple[str, str, tuple[str, ...], int] | None = None
         self._generation = 0
 
     @property
@@ -57,9 +62,23 @@ class TypeCheckService(QtCore.QObject):
         return self.executable is not None
 
     def check(self, text: str, filename: str, builtins: tuple[str, ...] = ()) -> None:
-        self.cancel()
+        self._generation += 1
         generation = self._generation
+        self._pending = None
+        if self._process is not None:
+            self._pending = (text, filename, builtins, generation)
+            return
+        self._start_check(text, filename, builtins, generation)
 
+    def _start_check(
+        self,
+        text: str,
+        filename: str,
+        builtins: tuple[str, ...],
+        generation: int,
+    ) -> None:
+        if generation != self._generation:
+            return
         if not self.executable:
             self.check_ready.emit([], "Type checking unavailable")
             return
@@ -82,17 +101,19 @@ class TypeCheckService(QtCore.QObject):
                 self.check_failed.emit(f"Could not prepare type checking: {exc}")
             return
 
-        self._temporary = temporary
         process = QtCore.QProcess(self)
         self._process = process
+        self._requests[process] = (temporary, line_offset)
         process.finished.connect(
-            lambda code, status, p=process, g=generation, offset=line_offset: self._finished(
-                p, g, offset, code, status
-            )
+            lambda code, status, p=process, g=generation: self._finished(p, g, code, status)
         )
         process.errorOccurred.connect(
             lambda _error, p=process, g=generation: self._process_error(p, g)
         )
+        timeout = QtCore.QTimer(process)
+        timeout.setSingleShot(True)
+        timeout.timeout.connect(lambda p=process, g=generation: self._timed_out(p, g))
+        timeout.start(_CHECK_TIMEOUT_MS)
         stub_path = Path(__file__).resolve().parents[1]
         process.start(
             self.executable,
@@ -115,56 +136,76 @@ class TypeCheckService(QtCore.QObject):
         self,
         process: QtCore.QProcess,
         generation: int,
-        line_offset: int,
         exit_code: int,
         _exit_status: QtCore.QProcess.ExitStatus,
     ) -> None:
-        if generation != self._generation:
-            process.deleteLater()
+        request = self._requests.get(process)
+        if request is None:
             return
-        stdout = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace")
-        stderr = bytes(process.readAllStandardError()).decode("utf-8", errors="replace").strip()
-        if exit_code not in (0, 1):
-            self.check_failed.emit(stderr or f"ty exited with status {exit_code}")
-        else:
-            try:
-                diagnostics = [
-                    diagnostic
-                    for diagnostic in parse_ty_output(stdout, line_offset)
-                    if diagnostic.code not in _RUFF_OWNED_CODES
-                ]
-                self.check_ready.emit(diagnostics, "ty")
-            except ValueError as exc:
-                self.check_failed.emit(str(exc))
+        if generation == self._generation:
+            stdout = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace")
+            stderr = bytes(process.readAllStandardError()).decode(
+                "utf-8", errors="replace"
+            ).strip()
+            if exit_code not in (0, 1):
+                self.check_failed.emit(stderr or f"ty exited with status {exit_code}")
+            else:
+                try:
+                    diagnostics = [
+                        diagnostic
+                        for diagnostic in parse_ty_output(stdout, request[1])
+                        if diagnostic.code not in _RUFF_OWNED_CODES
+                    ]
+                    self.check_ready.emit(diagnostics, "ty")
+                except ValueError as exc:
+                    self.check_failed.emit(str(exc))
         if process is self._process:
             self._process = None
-            self._cleanup_temporary()
-        process.deleteLater()
+        self._dispose_request(process)
+        self._start_pending()
 
     def _process_error(self, process: QtCore.QProcess, generation: int) -> None:
-        if generation != self._generation:
-            process.deleteLater()
+        if process not in self._requests:
             return
+        if generation == self._generation:
+            self.check_failed.emit(process.errorString() or "Could not start ty type checker")
         if process is self._process:
             self._process = None
-            self._cleanup_temporary()
-        self.check_failed.emit(process.errorString() or "Could not start ty type checker")
+        self._dispose_request(process)
+        self._start_pending()
+
+    def _timed_out(self, process: QtCore.QProcess, generation: int) -> None:
+        if process not in self._requests:
+            return
+        if process.state() != QtCore.QProcess.ProcessState.NotRunning:
+            process.kill()
+        if generation == self._generation:
+            self._generation += 1
+            self.check_failed.emit("ty did not finish within 10 seconds")
+
+    def _dispose_request(self, process: QtCore.QProcess) -> None:
+        request = self._requests.pop(process, None)
+        if request is not None:
+            request[0].cleanup()
         process.deleteLater()
 
-    def _cleanup_temporary(self) -> None:
-        if self._temporary is not None:
-            self._temporary.cleanup()
-            self._temporary = None
+    def _start_pending(self) -> None:
+        if self._process is not None or self._pending is None:
+            return
+        text, filename, builtins, generation = self._pending
+        self._pending = None
+        self._start_check(text, filename, builtins, generation)
 
     def cancel(self) -> None:
         self._generation += 1
-        if self._process is not None:
-            if self._process.state() != QtCore.QProcess.ProcessState.NotRunning:
-                self._process.kill()
-                self._process.waitForFinished(100)
-            self._process.deleteLater()
-            self._process = None
-        self._cleanup_temporary()
+        self._pending = None
 
     def shutdown(self) -> None:
-        self.cancel()
+        self._generation += 1
+        self._pending = None
+        for process in list(self._requests):
+            if process.state() != QtCore.QProcess.ProcessState.NotRunning:
+                process.kill()
+                process.waitForFinished(250)
+            self._dispose_request(process)
+        self._process = None

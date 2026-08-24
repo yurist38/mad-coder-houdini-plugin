@@ -2,11 +2,11 @@
 
 ![Mad Coder logo](mad-coder/config/Icons/MAD_mad_coder.svg)
 
-Mad Coder is a dockable Python editor for SideFX Houdini with Python autocomplete, live Ruff
-linting, ty type diagnostics, and formatting.
-It edits the current scene's `hou.session` module, Python code parameters on selected nodes, and
-the `PythonModule` and `ViewerStateModule` sections of selected Houdini digital assets without
-modifying Houdini's internal editor widgets.
+Mad Coder is a dockable Python and VEX editor for SideFX Houdini with Python autocomplete, live
+Ruff linting, ty type diagnostics, VEX syntax checking, and formatting. It edits the current
+scene's `hou.session` module, tagged Python and VEX parameters on selected nodes, and the
+`PythonModule` and `ViewerStateModule` sections of selected Houdini digital assets without modifying
+Houdini's internal editor widgets.
 
 ![Mad Coder preview](docs/images/mad-coder-preview.jpg)
 
@@ -17,6 +17,7 @@ modifying Houdini's internal editor widgets.
 - Context-aware Python and Houdini autocomplete powered by Jedi
 - Debounced Ruff linting that never blocks Houdini's UI
 - Background Python and Houdini API type checking powered by ty
+- Native VEX Wrangle syntax checking powered by Houdini's `vcc`
 - Full-line error/warning highlights with precise underlines and hover text
 - Navigable Problems list
 - Ruff formatting
@@ -135,7 +136,7 @@ $HOUDINI_USER_PREF_DIR/packages/mad-coder.json
 $HOUDINI_USER_PREF_DIR/mad-coder/
 ```
 
-Then restart Houdini. Uninstalling does not alter Python source already saved in `.hip` files.
+Then restart Houdini. Uninstalling does not alter Python or VEX source already saved in `.hip` files.
 
 ## Open and use the editor
 
@@ -149,8 +150,8 @@ contains unsaved changes.
 ### Open code from a node
 
 1. Leave **Follow Selection** enabled.
-2. Select a Python node, such as a Python SOP, in a network editor.
-3. Mad Coder opens the node's supported Python parameter automatically.
+2. Select a Python node or a VEX node such as an Attribute Wrangle in a network editor.
+3. Mad Coder opens parameters Houdini identifies as Python or VEX source automatically.
 4. If the node is a digital asset with a `PythonModule` or `ViewerStateModule` section, choose it
    from the source selector when you want to edit that embedded module instead.
 
@@ -174,12 +175,13 @@ macOS or Consolas on Windows. `Ctrl` + mouse wheel remains available for tempora
 
 ### Editing workflow
 
-- Type normally; linting and type checking run after a short pause.
+- Type normally; language-appropriate analysis runs after a short pause.
 - Type `.` to open context-aware suggestions, or press `Ctrl+Space` to
   request suggestions explicitly. Use Tab or Enter to accept and Escape to close the popup.
 - Hover over an underlined range to read its diagnostic.
 - Click a row in **Problems** to jump to its location.
-- Select **Format** to apply Ruff formatting to the editor buffer.
+- Select **Format** to apply Ruff formatting to a Python editor buffer. VEX formatting is not
+  currently provided.
 - Select **Save** to apply the buffer to its current Houdini source.
 - Select **Run** to save, execute in the source's Houdini context, and open captured output.
 - Select **Reload** to discard the buffer and read the current source again.
@@ -210,6 +212,8 @@ Run applies the current buffer before executing it:
 
 - A Python node parameter is saved and its node is forced to cook in the correct Houdini context.
   This preserves behavior such as `hou.pwd()` and geometry-write permissions.
+- A VEX parameter is saved and its node is forced to cook, compiling and executing the snippet in
+  the node's native context.
 - `hou.session` is applied and evaluated by Houdini.
 - An HDA `PythonModule` is saved and loaded. Modules that only define functions may produce no
   output until another callback invokes those functions.
@@ -257,6 +261,8 @@ Autocomplete uses static analysis and does not execute the editor buffer or insp
 objects. If Jedi is unavailable in a source checkout, the editor remains usable; explicit
 autocomplete reports how to install the missing runtime dependencies.
 
+Autocomplete is currently Python-only. VEX buffers do not show Jedi suggestions.
+
 ## Type-checking behavior
 
 Release archives contain a pinned [ty](https://docs.astral.sh/ty/) executable. Mad Coder runs it in
@@ -279,6 +285,26 @@ MAD_CODER_TY=/absolute/path/to/ty
 ```
 
 The resolution order is explicit environment variable, bundled executable, then system `PATH`.
+
+## VEX syntax-checking behavior
+
+Mad Coder discovers string parameters whose Houdini parameter template declares
+`editorlang=VEX`, including Attribute Wrangle snippets. It switches to VEX highlighting and runs
+Houdini's own `vcc` compiler asynchronously, displaying compiler errors inline and in Problems.
+
+Wrangle-only attribute bindings such as `@P`, `v@N`, and `i[]@ids` are converted into typed
+arguments in a temporary analysis function. The original parameter text is never modified, and
+generated line and column positions are mapped back to the editor. Comments and strings are kept
+out of binding discovery. The checker compiles but does not execute the VEX buffer or cook the
+scene; choosing **Run** explicitly saves and cooks the source node.
+
+`vcc` is supplied by Houdini and is not bundled in Mad Coder's release archives. Mad Coder locates
+it through `MAD_CODER_VCC`, `$HFS/bin`, Houdini's executable directory, then `PATH`. To override it,
+set this before Houdini starts:
+
+```text
+MAD_CODER_VCC=/absolute/path/to/vcc
+```
 
 ## Linting behavior
 
@@ -326,6 +352,12 @@ The bundled type-checker executable is missing, quarantined, or cannot execute. 
 correct platform archive. On macOS, apply the security step above. You can also disable type
 checking in Settings or provide an explicit `MAD_CODER_TY` path.
 
+### The lint badge says “VEX syntax unavailable”
+
+Mad Coder could not locate Houdini's `vcc` executable. Confirm Houdini defines `HFS`, or set
+`MAD_CODER_VCC` to the `vcc` executable from the same Houdini installation. VEX editing and saving
+remain available without live diagnostics.
+
 ### Python suggestions work but `hou.` suggestions are missing
 
 Release archives include Houdini API stubs, and a normal `hou.` request should show HOM functions
@@ -347,10 +379,13 @@ inside Houdini's native editor.
 
 ## Current limitations
 
-- Node discovery currently recognizes common Python code parameter names and HDA `PythonModule`
-  and `ViewerStateModule` sections; HDA event-handler sections are not yet included.
+- Node discovery recognizes Houdini-tagged Python and VEX parameters, common legacy Python parameter
+  names, and HDA `PythonModule` and `ViewerStateModule` sections; HDA event-handler sections are not
+  yet included.
 - Autocomplete and type checking are static and do not inspect live Houdini objects, so dynamic HDA
   members and dynamically populated `kwargs` values may be incomplete.
+- VEX analysis currently targets parameter snippets. It does not provide VEX completion, formatting,
+  or full standalone `.vfl` file editing.
 - There is no refactoring or language-server integration yet.
 - Ruff fixes are shown as fixable diagnostics but are not individually applied; Format formats the
   complete buffer.

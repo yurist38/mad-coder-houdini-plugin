@@ -1,4 +1,4 @@
-"""A lightweight Python syntax highlighter for the editor."""
+"""Lightweight Python and VEX syntax highlighters for the editor."""
 
 from __future__ import annotations
 
@@ -101,3 +101,92 @@ class PythonHighlighter(QtGui.QSyntaxHighlighter):
             self.setCurrentBlockState(state)
             length = len(text) - start
         self.setFormat(start, max(0, length), self._multiline_format)
+
+
+class VexHighlighter(QtGui.QSyntaxHighlighter):
+    """Highlight common VEX tokens without requiring an external grammar."""
+
+    def __init__(self, document: QtGui.QTextDocument) -> None:
+        super().__init__(document)
+        self._rules: list[tuple[QtCore.QRegularExpression, QtGui.QTextCharFormat]] = []
+        keyword_format = self._format("#c586c0", bold=True)
+        type_format = self._format("#4ec9b0")
+        number_format = self._format("#b5cea8")
+        string_format = self._format("#ce9178")
+        comment_format = self._format("#6a9955", italic=True)
+        attribute_format = self._format("#dcdcaa")
+        preprocessor_format = self._format("#569cd6")
+
+        self._rules.extend(
+            [
+                (
+                    QtCore.QRegularExpression(
+                        r"\b(?:break|case|const|continue|default|do|else|export|extern|for|"
+                        r"foreach|forpoints|function|gather|if|import|in|next|private|return|"
+                        r"while)\b"
+                    ),
+                    keyword_format,
+                ),
+                (
+                    QtCore.QRegularExpression(
+                        r"\b(?:bsdf|chop|cvex|dict|displace|float|fog|image3d|int|light|"
+                        r"matrix|matrix2|matrix3|shadow|string|struct|surface|vector|vector2|"
+                        r"vector4|void)\b"
+                    ),
+                    type_format,
+                ),
+                (
+                    QtCore.QRegularExpression(
+                        r"\b(?:0[xX][0-9A-Fa-f]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b"
+                    ),
+                    number_format,
+                ),
+                (QtCore.QRegularExpression(r'"(?:\\.|[^"\\])*"'), string_format),
+                (QtCore.QRegularExpression(r"'(?:\\.|[^'\\])*'"), string_format),
+                (
+                    QtCore.QRegularExpression(
+                        r"(?:\b[fuvp234isd](?:\[\])?)?@[A-Za-z_][A-Za-z0-9_]*"
+                    ),
+                    attribute_format,
+                ),
+                (QtCore.QRegularExpression(r"^\s*#[A-Za-z_][^\n]*"), preprocessor_format),
+                (QtCore.QRegularExpression(r"//[^\n]*"), comment_format),
+            ]
+        )
+        self._comment_start = QtCore.QRegularExpression(r"/\*")
+        self._comment_end = QtCore.QRegularExpression(r"\*/")
+        self._comment_format = comment_format
+
+    @staticmethod
+    def _format(color: str, *, bold: bool = False, italic: bool = False) -> QtGui.QTextCharFormat:
+        value = QtGui.QTextCharFormat()
+        value.setForeground(QtGui.QColor(color))
+        if bold:
+            value.setFontWeight(QtGui.QFont.Weight.Bold)
+        value.setFontItalic(italic)
+        return value
+
+    def highlightBlock(self, text: str) -> None:  # noqa: N802 - Qt API
+        for expression, text_format in self._rules:
+            iterator = expression.globalMatch(text)
+            while iterator.hasNext():
+                match = iterator.next()
+                self.setFormat(match.capturedStart(), match.capturedLength(), text_format)
+
+        self.setCurrentBlockState(0)
+        start = (
+            0 if self.previousBlockState() == 1 else self._comment_start.match(text).capturedStart()
+        )
+        while start >= 0:
+            end_match = self._comment_end.match(
+                text, start + (0 if self.previousBlockState() == 1 else 2)
+            )
+            if end_match.hasMatch():
+                length = end_match.capturedEnd() - start
+            else:
+                self.setCurrentBlockState(1)
+                length = len(text) - start
+            self.setFormat(start, max(0, length), self._comment_format)
+            if not end_match.hasMatch():
+                break
+            start = self._comment_start.match(text, end_match.capturedEnd()).capturedStart()

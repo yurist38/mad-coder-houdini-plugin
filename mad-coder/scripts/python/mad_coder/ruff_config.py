@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 
 
-def check_arguments(filename: str, builtins: tuple[str, ...] = ()) -> list[str]:
+def check_arguments(
+    filename: str,
+    builtins: tuple[str, ...] = (),
+    ignored_codes: tuple[str, ...] = (),
+) -> list[str]:
     """Return isolated Ruff check arguments for a Houdini source context."""
 
     unique_builtins = tuple(dict.fromkeys(builtins))
@@ -26,5 +30,8 @@ def check_arguments(filename: str, builtins: tuple[str, ...] = ()) -> list[str]:
     if unique_builtins:
         value = json.dumps(list(unique_builtins), ensure_ascii=True)
         arguments.extend(["--config", f"builtins = {value}"])
+    unique_ignored_codes = tuple(dict.fromkeys(ignored_codes))
+    if unique_ignored_codes:
+        arguments.extend(["--ignore", ",".join(unique_ignored_codes)])
     arguments.extend(["--stdin-filename", filename, "-"])
     return arguments

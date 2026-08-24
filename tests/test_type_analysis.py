@@ -15,8 +15,14 @@ class TypeAnalysisSourceTests(unittest.TestCase):
             'hou.node("/")\n"some string".upper()\n', ("hou", "kwargs")
         )
 
-        self.assertEqual(offset, 2)
-        self.assertTrue(source.startswith("import hou as hou\nkwargs: dict[str, object] = {}\n"))
+        self.assertEqual(offset, 3)
+        self.assertTrue(
+            source.startswith(
+                "import hou as hou\n"
+                "from typing import Any as _MadCoderAny\n"
+                "kwargs: dict[str, _MadCoderAny] = {}\n"
+            )
+        )
         self.assertEqual(source.splitlines()[offset], 'hou.node("/")')
 
     def test_keeps_future_imports_valid_and_preserves_line_mapping(self) -> None:

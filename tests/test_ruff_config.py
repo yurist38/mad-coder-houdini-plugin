@@ -25,6 +25,12 @@ class CheckArgumentsTests(unittest.TestCase):
         config_index = arguments.index("--config")
         self.assertEqual(arguments[config_index + 1], 'builtins = ["hou", "kwargs"]')
 
+    def test_adds_context_specific_ignored_codes(self) -> None:
+        arguments = check_arguments("python_snippet.py", ("hou", "kwargs"), ("F706",))
+
+        ignore_index = arguments.index("--ignore")
+        self.assertEqual(arguments[ignore_index + 1], "F706")
+
     def test_rejects_invalid_python_names(self) -> None:
         with self.assertRaises(ValueError):
             check_arguments("script.py", ("not-a-name",))

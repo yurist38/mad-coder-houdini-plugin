@@ -1,7 +1,7 @@
 [project]
 name = "mad-coder"
 version = "0.1.0"
-description = "Mad Coder: a dockable Houdini Python editor with autocomplete and type checking"
+description = "Mad Coder: a dockable Houdini Python and VEX editor"
 requires-python = ">=3.11"
 license = "MIT"
 

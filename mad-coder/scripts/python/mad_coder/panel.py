@@ -16,12 +16,16 @@ from .execution import capture_execution
 from .linting import RuffService
 from .preferences import EditorPreferences, PreferencesStore, default_font_family
 from .settings_dialog import SettingsDialog
-from .source import SessionSource, SourceAdapter, SourceConflictError, python_sources_for_node
+from .source import SessionSource, SourceAdapter, SourceConflictError, code_sources_for_node
 from .type_checking import TypeCheckService
+from .vex_checking import VccService
+
+_PYTHON_ANALYSIS_DELAY_MS = 400
+_VEX_ANALYSIS_DELAY_MS = 1000
 
 
 class MadCoderPanel(QtWidgets.QWidget):
-    """Edit Python stored in the scene, selected nodes, and digital assets."""
+    """Edit Python and VEX stored in the scene, nodes, and digital assets."""
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -39,6 +43,10 @@ class MadCoderPanel(QtWidgets.QWidget):
         self._analysis_results: dict[str, list[Diagnostic]] = {}
         self._analysis_engines: dict[str, str] = {}
         self._analysis_failures: dict[str, str] = {}
+        self._last_vex_checked_text: str | None = None
+        self._vex_check_text: str | None = None
+        self._editor_has_focus = False
+        self._shutting_down = False
 
         available_fonts = list(QtGui.QFontDatabase.families())
         system_fixed_font = QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont)
@@ -54,11 +62,11 @@ class MadCoderPanel(QtWidgets.QWidget):
         self._source_selector.setSizeAdjustPolicy(
             QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
-        self._source_selector.setToolTip("Choose the Python source to edit")
+        self._source_selector.setToolTip("Choose the Python or VEX source to edit")
         self._follow_selection = QtWidgets.QCheckBox("Follow Selection")
         self._follow_selection.setChecked(True)
         self._follow_selection.setToolTip(
-            "Open supported Python code when a node is selected in the network editor"
+            "Open supported Python or VEX code when a node is selected in the network editor"
         )
         self._use_selected_button = QtWidgets.QPushButton("Use Selected")
         self._settings_button = QtWidgets.QPushButton("Settings…")
@@ -130,12 +138,14 @@ class MadCoderPanel(QtWidgets.QWidget):
 
         self._lint_timer = QtCore.QTimer(self)
         self._lint_timer.setSingleShot(True)
-        self._lint_timer.setInterval(400)
+        self._lint_timer.setInterval(_PYTHON_ANALYSIS_DELAY_MS)
         self._ruff = RuffService(self)
         self._type_checker = TypeCheckService(self)
+        self._vcc = VccService(self)
         self._completion = CompletionService(self)
 
         self.editor.textChanged.connect(self._text_changed)
+        self.editor.focus_changed.connect(self._editor_focus_changed)
         self.editor.completion_requested.connect(self._request_completion)
         self._source_selector.currentIndexChanged.connect(self._source_selected)
         self._follow_selection.toggled.connect(self._follow_selection_toggled)
@@ -156,6 +166,8 @@ class MadCoderPanel(QtWidgets.QWidget):
         self._completion.completion_failed.connect(self._completion_failed)
         self._type_checker.check_ready.connect(self._type_check_ready)
         self._type_checker.check_failed.connect(self._type_check_failed)
+        self._vcc.check_ready.connect(self._vex_check_ready)
+        self._vcc.check_failed.connect(self._vex_check_failed)
 
         self._shortcuts = [
             QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Save, self),
@@ -200,7 +212,7 @@ class MadCoderPanel(QtWidgets.QWidget):
         if node is None:
             return []
         try:
-            return python_sources_for_node(node, self._hou)
+            return code_sources_for_node(node, self._hou)
         except Exception as exc:
             self._set_status(f"Could not inspect the selected node: {exc}", error=True)
             return []
@@ -348,7 +360,11 @@ class MadCoderPanel(QtWidgets.QWidget):
         self.editor.setReadOnly(read_only)
         if read_only:
             self.editor.hide_completions()
-        self._format_button.setEnabled(not read_only)
+        python_source = self._source.language == "python"
+        self._format_button.setEnabled(not read_only and python_source)
+        self._format_button.setToolTip(
+            "Format Python with Ruff" if python_source else "Formatting is unavailable for VEX"
+        )
         self._save_button.setEnabled(self._is_dirty() and not read_only)
         self._run_button.setEnabled(not self._running)
         return reason
@@ -373,9 +389,24 @@ class MadCoderPanel(QtWidgets.QWidget):
     def _text_changed(self) -> None:
         if self._loading:
             return
+        if self.editor.hasFocus():
+            self._editor_has_focus = True
         self._apply_source_state()
         self._update_source_title()
-        self._lint_badge.setText("Checking…")
+        if self._source.language == "vex":
+            # Invalidate an in-flight result immediately. The process may finish quietly,
+            # so typing never waits for or repeatedly hard-kills vcc.
+            self._vcc.cancel()
+            self._vex_check_text = None
+            self._lint_timer.setInterval(_VEX_ANALYSIS_DELAY_MS)
+            if not self._vex_analysis_is_active():
+                self._lint_timer.stop()
+                self._lint_badge.setText("VEX check paused")
+                return
+            self._lint_badge.setText("VEX check pending…")
+        else:
+            self._lint_timer.setInterval(_PYTHON_ANALYSIS_DELAY_MS)
+            self._lint_badge.setText("Checking…")
         self._lint_timer.start()
 
     def reload(self, force: bool = False) -> bool:
@@ -399,10 +430,13 @@ class MadCoderPanel(QtWidgets.QWidget):
 
         self._completion.cancel()
         self.editor.hide_completions()
+        self.editor.set_language(self._source.language)
         self._loading = True
         self.editor.setPlainText(source)
         self._loading = False
         self._baseline = source
+        self._last_vex_checked_text = None
+        self._vex_check_text = None
         self._apply_source_state()
         self.editor.setPlaceholderText(self._source.placeholder)
         self._update_source_title()
@@ -433,7 +467,7 @@ class MadCoderPanel(QtWidgets.QWidget):
     def _resolve_conflict(self, text: str) -> None:
         box = QtWidgets.QMessageBox(self)
         box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
-        box.setWindowTitle("Python source changed")
+        box.setWindowTitle("Code source changed")
         box.setText(f"{self._source.display_name} was changed outside this editor.")
         box.setInformativeText(
             "Reload the external version or overwrite it with this editor's text?"
@@ -507,7 +541,7 @@ class MadCoderPanel(QtWidgets.QWidget):
             )
 
     def format_code(self) -> None:
-        if self.editor.isReadOnly():
+        if self.editor.isReadOnly() or self._source.language != "python":
             return
         self._set_status("Formatting with Ruff…")
         self._ruff.format(self.editor.toPlainText(), self._source.lint_filename)
@@ -527,6 +561,8 @@ class MadCoderPanel(QtWidgets.QWidget):
         self._set_status(f"Format failed: {message}", error=True)
 
     def _request_completion(self, explicit: bool) -> None:
+        if self._source.language != "python":
+            return
         cursor = self.editor.textCursor()
         self._completion_request_explicit = explicit
         self._completion.complete(
@@ -546,16 +582,33 @@ class MadCoderPanel(QtWidgets.QWidget):
         text = self.editor.toPlainText()
         filename = self._source.lint_filename
         builtins = self._source.lint_builtins
-        self._analysis_expected = {"ruff"}
+        ignored_codes = self._source.lint_ignores
         self._analysis_results = {}
         self._analysis_engines = {}
         self._analysis_failures = {}
+        if self._source.language == "vex":
+            if not self._vex_analysis_is_active():
+                self._analysis_expected = set()
+                self._vex_check_text = None
+                self._lint_badge.setText("VEX check paused")
+                return
+            self._analysis_expected = {"vex"}
+            self._vex_check_text = text
+            self._lint_badge.setText("Checking VEX…")
+            self._completion.cancel()
+            self._ruff.cancel_lint()
+            self._type_checker.cancel()
+            self._vcc.check(text, filename)
+            return
+
+        self._analysis_expected = {"ruff"}
+        self._vcc.cancel()
         if self._type_checking_enabled and self._type_checker.available:
             self._analysis_expected.add("ty")
             self._type_checker.check(text, filename, builtins)
         else:
             self._type_checker.cancel()
-        self._ruff.lint(text, filename, builtins)
+        self._ruff.lint(text, filename, builtins, ignored_codes)
 
     def _lint_ready(self, diagnostics: list[Diagnostic], engine: str) -> None:
         self._analysis_ready("ruff", diagnostics, engine)
@@ -563,22 +616,36 @@ class MadCoderPanel(QtWidgets.QWidget):
     def _type_check_ready(self, diagnostics: list[Diagnostic], engine: str) -> None:
         self._analysis_ready("ty", diagnostics, engine)
 
+    def _vex_check_ready(self, diagnostics: list[Diagnostic], engine: str) -> None:
+        if self._vex_check_text == self.editor.toPlainText():
+            self._last_vex_checked_text = self._vex_check_text
+        self._analysis_ready("vex", diagnostics, engine)
+
     def _analysis_ready(self, source: str, diagnostics: list[Diagnostic], engine: str) -> None:
         if source not in self._analysis_expected:
             return
         self._analysis_results[source] = diagnostics
         self._analysis_engines[source] = engine
         if not self._analysis_expected.issubset(self._analysis_results):
+            labels = {"ruff": "Ruff", "ty": "ty", "vex": "VEX"}
+            pending = [
+                labels[key]
+                for key in ("ruff", "ty", "vex")
+                if key in self._analysis_expected and key not in self._analysis_results
+            ]
+            self._lint_badge.setText(f"Checking {' + '.join(pending)}…")
             return
 
         combined = [
             diagnostic
-            for key in ("ruff", "ty")
+            for key in ("ruff", "ty", "vex")
             for diagnostic in self._analysis_results.get(key, [])
         ]
         combined.sort(key=lambda diagnostic: (diagnostic.line, diagnostic.column, diagnostic.code))
         engines = [
-            self._analysis_engines[key] for key in ("ruff", "ty") if key in self._analysis_engines
+            self._analysis_engines[key]
+            for key in ("ruff", "ty", "vex")
+            if key in self._analysis_engines
         ]
         if self._type_checking_enabled and not self._type_checker.available:
             engines.append("ty unavailable")
@@ -611,11 +678,58 @@ class MadCoderPanel(QtWidgets.QWidget):
     def _type_check_failed(self, message: str) -> None:
         self._analysis_failed("ty", message)
 
+    def _vex_check_failed(self, message: str) -> None:
+        if self._vex_check_text == self.editor.toPlainText():
+            self._last_vex_checked_text = self._vex_check_text
+        self._analysis_failed("vex", message)
+
+    def _vex_analysis_is_active(self) -> bool:
+        return not self._shutting_down and (self._editor_has_focus or self.editor.hasFocus())
+
+    def _pause_vex_analysis(self) -> None:
+        if self._source.language != "vex":
+            return
+        was_pending = self._lint_timer.isActive()
+        self._lint_timer.stop()
+        if was_pending:
+            self._lint_badge.setText("VEX check paused")
+        elif self._vcc.running:
+            self._lint_badge.setText("Checking VEX in background…")
+
+    def _resume_vex_analysis(self) -> None:
+        if self._source.language != "vex" or not self._vex_analysis_is_active():
+            return
+        text = self.editor.toPlainText()
+        if self._vcc.running and self._vex_check_text == text:
+            self._lint_badge.setText("Checking VEX…")
+            return
+        if text == self._last_vex_checked_text:
+            return
+        self._lint_timer.setInterval(_VEX_ANALYSIS_DELAY_MS)
+        self._lint_badge.setText("VEX check pending…")
+        self._lint_timer.start()
+
+    def _editor_focus_changed(self, focused: bool) -> None:
+        self._editor_has_focus = focused
+        if focused:
+            self._resume_vex_analysis()
+        else:
+            self._pause_vex_analysis()
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:  # noqa: N802 - Qt API name
+        super().showEvent(event)
+        self._resume_vex_analysis()
+
+    def hideEvent(self, event: QtGui.QHideEvent) -> None:  # noqa: N802 - Qt API name
+        self._pause_vex_analysis()
+        super().hideEvent(event)
+
     def _analysis_failed(self, source: str, message: str) -> None:
         if source not in self._analysis_expected:
             return
         self._analysis_failures[source] = message
-        label = "Ruff" if source == "ruff" else "Type checking"
+        labels = {"ruff": "Ruff", "ty": "Type checking", "vex": "VEX syntax check"}
+        label = labels[source]
         self._analysis_ready(source, [], f"{label} failed")
         self._set_status(f"{label} failed: {message}", error=True)
 
@@ -651,6 +765,7 @@ class MadCoderPanel(QtWidgets.QWidget):
         QtWidgets.QMessageBox.critical(self, title, message)
 
     def shutdown(self) -> None:
+        self._shutting_down = True
         if self._selection_callback_registered:
             try:
                 self._hou.ui.removeSelectionCallback(self._selection_changed)
@@ -661,4 +776,5 @@ class MadCoderPanel(QtWidgets.QWidget):
         self.editor.hide_completions()
         self._completion.shutdown()
         self._type_checker.shutdown()
+        self._vcc.shutdown()
         self._ruff.shutdown()
