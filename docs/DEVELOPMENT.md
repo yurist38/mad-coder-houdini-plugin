@@ -7,6 +7,7 @@
 - Jedi 0.20.0, Parso 0.8.7, and types-houdini 21.0.512.3 for autocomplete
 - ty 0.0.72 for editor type diagnostics
 - Ruff 0.16.0 and BasedPyright 1.39.9 for repository checks
+- Houdini's bundled `vcc` for interactive VEX syntax checking
 - Git
 
 For VS Code diagnostics, install the recommended BasedPyright extension
@@ -41,6 +42,9 @@ path:
 Install Ruff 0.16.0 and ty 0.0.72 separately and make them visible through `PATH`, copy their
 executables to `mad-coder/bin`, or set `MAD_CODER_RUFF` and `MAD_CODER_TY` before starting Houdini. Restart
 Houdini after adding or changing package files.
+
+VEX checking uses `$HFS/bin/vcc` from the active Houdini installation. Set `MAD_CODER_VCC` only when
+testing against a different explicit compiler path.
 
 Python module edits can usually be tested by choosing **Reload Interface** from the Python Panel's
 interface menu. Changes to the `.pypanel` definition or package configuration may require a Houdini
@@ -113,14 +117,18 @@ Before releasing:
 15. Disable Follow Selection, select another supported node, and verify **Use Selected** opens it.
 16. Open a source in a non-writable HDA library and confirm it is view-only.
 17. Format deliberately irregular code and verify the cursor remains near its original position.
-18. Open **Settings…**, select another monospaced font and size, disable autocomplete and type
+18. Create and select an Attribute Wrangle. Confirm Mad Coder opens its VEX-tagged `snippet`
+    parameter, uses VEX highlighting, and disables Python completion and Format. Enter
+    `@P += {1, 0, ;` and confirm vcc reports the error at the original line and column. Correct it,
+    select **Run**, and confirm the node saves and cooks successfully.
+19. Open **Settings…**, select another monospaced font and size, disable autocomplete and type
     checking, and confirm suggestions and ty diagnostics stop while Ruff continues. Close and
     reopen Houdini and confirm the choices persist.
-19. Use **Restore Defaults** and confirm autocomplete and type checking are enabled and Roboto Mono
+20. Use **Restore Defaults** and confirm autocomplete and type checking are enabled and Roboto Mono
     is selected when installed, or the platform fixed-width font otherwise. Confirm Cancel does not
     apply a change.
-20. Load and clear scenes while the panel is open and verify source discovery refreshes.
-21. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
+21. Load and clear scenes while the panel is open and verify source discovery refreshes.
+22. Repeat the smoke test with Houdini 22's default Python 3.13 build when preparing a public
    release.
 
 ## Build a release archive locally

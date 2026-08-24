@@ -5,6 +5,14 @@
 - Add configurable background Python autocomplete for local code, Houdini APIs, and source-context
   globals, enabled by default.
 - Add configurable background ty diagnostics for Python values and Houdini APIs, enabled by default.
+- Add VEX parameter discovery, highlighting, and asynchronous Wrangle syntax diagnostics using
+  Houdini's bundled vcc compiler.
+- Keep VEX typing responsive by debouncing compiler launches, pausing checks while its editor is
+  unfocused, and queueing the latest source while an in-flight compiler exits normally.
+- Prevent Python analysis from remaining in `Checking…` by queueing the latest Ruff and ty
+  requests, reporting the pending engine, and timing out stalled processes.
+- Recognize Houdini Python Snippet function-body semantics so valid top-level returns and dynamic
+  `kwargs` values do not produce false-positive Ruff or ty diagnostics.
 - Add a source selector for `hou.session`, selected-node Python parameters, and HDA
   `PythonModule` sections.
 - Add Follow Selection and Use Selected workflows.

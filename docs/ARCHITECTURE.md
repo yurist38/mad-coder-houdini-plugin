@@ -21,16 +21,18 @@ Houdini package JSON
       ├── PythonHighlighter → dependency-free token highlighting
       ├── CompletionService → serialized background Jedi analysis
       ├── RuffService → asynchronous lint and format subprocesses
-      └── TypeCheckService → asynchronous ty subprocesses
+      ├── TypeCheckService → asynchronous ty subprocesses
+      └── VccService → asynchronous VEX compilation
 ```
 
 ## UI thread policy
 
 All widgets, source execution, node cooking, and `hou` calls stay on Houdini's main thread. This is
-required for the live Houdini scene, but means arbitrary user code can block the application. Ruff
-and ty work run in `QProcess` instances, so analysis does not execute on the UI thread and does not
-require calling `hou` from a worker. Results return through Qt signals. Starting a new analysis pass
-invalidates or terminates the preceding pass, and the panel publishes only a complete current pair.
+required for the live Houdini scene, but means arbitrary user code can block the application. Ruff,
+ty, and vcc work run in `QProcess` instances, so analysis does not execute on the UI thread and does
+not require calling `hou` from a worker. Results return through Qt signals. Starting a new analysis
+pass invalidates the preceding result and queues the latest request behind an in-flight process.
+The panel publishes only current results, and stalled analyzer processes time out after ten seconds.
 
 Jedi completion runs on one dedicated `QThread`. Requests are serialized because Jedi's fast parser
 is not thread-safe, and generation numbers discard results made stale by a newer request or source
@@ -51,6 +53,7 @@ This optimistic-concurrency boundary should be retained for every future source 
 Source adapters expose the same conceptual contract:
 
 - Human-readable display name
+- Source language (`python` or `vex`)
 - Synthetic filename for linting
 - Stable source key
 - Placeholder and save warning
@@ -60,10 +63,11 @@ Source adapters expose the same conceptual contract:
 - `execute()` using the source's native Houdini behavior
 - `read_only_reason()`
 
-`python_sources_for_node` currently discovers common Python parameter names and an HDA
-`PythonModule` and `ViewerStateModule` sections. Viewer states use Houdini's dedicated embedded
-module reload API. Likely future adapters include HDA event-handler sections and external files.
-The panel never switches adapters while the current buffer has unsaved changes.
+`code_sources_for_node` discovers parameters tagged by Houdini with `editorlang=Python` or
+`editorlang=VEX`, retains legacy Python parameter-name discovery, and finds HDA `PythonModule` and
+`ViewerStateModule` sections. Viewer states use Houdini's dedicated embedded module reload API.
+Likely future adapters include HDA event-handler sections and external files. The panel never
+switches adapters while the current buffer has unsaved changes.
 
 ## Linter boundary
 
@@ -82,12 +86,32 @@ deterministic defaults and report the active configuration clearly.
 
 ty is also a native external executable. `TypeCheckService` writes a temporary analysis copy of the
 buffer, launches ty with GitLab JSON output, maps its positions back to editor lines, and removes the
-temporary directory when the request finishes or is cancelled. The buffer is never executed.
+temporary directory when its process finishes. The buffer is never executed.
 
 An analysis-only prelude imports `hou` and declares other documented context globals. Existing
 `__future__` imports remain first in the temporary module, and the line offset is removed from every
 reported diagnostic. The bundled `types-houdini` search path resolves HOM APIs. Ruff remains
 responsible for syntax and undefined-name reports to prevent duplicate Problems entries.
+
+Houdini Python Snippet parameters execute as function bodies rather than standalone modules. Their
+source metadata therefore permits Ruff's top-level-return rule (`F706`) while leaving every other
+configured rule enabled. Unknown values in the snippet's `kwargs` mapping use `Any`, reflecting the
+node-dependent runtime bindings without producing false object-subscription errors.
+
+## VEX compiler boundary
+
+VEX parameter sources bypass Python completion, Ruff, ty, and formatting. `VccService` locates the
+compiler shipped with the active Houdini installation and runs it in a `QProcess`. Superseded
+results are invalidated without hard-killing the compiler; when necessary, the newest request waits
+for the in-flight process to exit and then runs automatically. A ten-second timeout handles a
+genuinely stuck compiler. Release archives do not redistribute `vcc`.
+
+Wrangle code is a snippet rather than a complete VEX program. A pure-Python preparation step scans
+outside comments and strings, converts bindings such as `@P` and `v@N` into typed function
+arguments, and wraps the buffer in an analysis-only function for the CVEX context. vcc output is
+parsed into the shared `Diagnostic` model, with generated lines and binding-width changes mapped
+back to the original buffer. Temporary source and compiled files are deleted after every request.
+No live Houdini node is changed or cooked during analysis.
 
 ## Completion boundary
 
@@ -133,10 +157,12 @@ font. Missing saved fonts and malformed sizes fall back safely; sizes are clampe
 
 - Missing Ruff: standard-library syntax checking remains available.
 - Missing ty: Ruff remains available and the lint badge identifies type checking as unavailable.
+- Missing vcc: VEX editing remains available and the badge identifies syntax checking as unavailable.
 - Missing Jedi: editing remains available and explicit autocomplete reports the missing dependency.
 - Completion failure or stale result: the popup stays closed and the editor buffer is unchanged.
 - Ruff process failure: the editor stays usable and displays the process error in its status area.
 - ty process failure: Ruff results remain usable and the type-check error appears in the status area.
+- vcc process failure: the VEX buffer remains usable and the process error appears in the status area.
 - Invalid Python on save: Houdini rejects it and the buffer remains unsaved.
 - External source modification: the user chooses reload, overwrite, or cancel.
 - Locked or non-writable source: the source remains available in view-only mode.

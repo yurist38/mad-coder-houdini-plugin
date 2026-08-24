@@ -6,7 +6,7 @@ from PySide6 import QtCore, QtGui, QtWidgets  # type: ignore[import-not-found]
 
 from .completion import CompletionItem, completion_prefix
 from .diagnostics import Diagnostic
-from .highlighter import PythonHighlighter
+from .highlighter import PythonHighlighter, VexHighlighter
 
 
 class LineNumberArea(QtWidgets.QWidget):
@@ -22,14 +22,16 @@ class LineNumberArea(QtWidgets.QWidget):
 
 
 class MadCoderEditor(QtWidgets.QPlainTextEdit):
-    """Python-oriented text editor that remains native to Houdini's Qt UI."""
+    """Code editor that remains native to Houdini's Qt UI."""
 
     completion_requested = QtCore.Signal(bool)
+    focus_changed = QtCore.Signal(bool)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._line_area = LineNumberArea(self)
         self._diagnostics: list[Diagnostic] = []
+        self._language = "python"
         self._highlighter = PythonHighlighter(self.document())
         self._completion_request_block = -1
         self._completion_request_position = -1
@@ -75,6 +77,25 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
         self.setFont(font)
         self._update_line_number_width()
         self._line_area.update()
+
+    @property
+    def language(self) -> str:
+        return self._language
+
+    def set_language(self, language: str) -> None:
+        """Select language-specific highlighting and editor behavior."""
+
+        language = "vex" if language == "vex" else "python"
+        if language == self._language:
+            return
+        self.hide_completions()
+        self._highlighter.setDocument(None)
+        self._highlighter.deleteLater()
+        self._language = language
+        if language == "vex":
+            self._highlighter = VexHighlighter(self.document())
+        else:
+            self._highlighter = PythonHighlighter(self.document())
 
     @property
     def autocomplete_enabled(self) -> bool:
@@ -236,6 +257,14 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
             QtWidgets.QToolTip.hideText()
         super().mouseMoveEvent(event)
 
+    def focusInEvent(self, event: QtGui.QFocusEvent) -> None:  # noqa: N802 - Qt API
+        super().focusInEvent(event)
+        self.focus_changed.emit(True)
+
+    def focusOutEvent(self, event: QtGui.QFocusEvent) -> None:  # noqa: N802 - Qt API
+        super().focusOutEvent(event)
+        self.focus_changed.emit(False)
+
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802 - Qt API
         self.hide_completions()
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -293,7 +322,9 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
             cursor = self.textCursor()
             current = cursor.block().text()
             indentation = current[: len(current) - len(current.lstrip())]
-            if current.rstrip().endswith(":"):
+            if (self._language == "python" and current.rstrip().endswith(":")) or (
+                self._language == "vex" and current.rstrip().endswith("{")
+            ):
                 indentation += " " * 4
             super().keyPressEvent(event)
             self.insertPlainText(indentation)
@@ -310,7 +341,7 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
             self._refresh_completion_prefix()
 
     def _request_completions(self, *, explicit: bool) -> None:
-        if self.isReadOnly() or not self._autocomplete_enabled:
+        if self._language != "python" or self.isReadOnly() or not self._autocomplete_enabled:
             return
         cursor = self.textCursor()
         self._completion_request_block = cursor.blockNumber()
@@ -323,7 +354,8 @@ class MadCoderEditor(QtWidgets.QPlainTextEdit):
 
         cursor = self.textCursor()
         if (
-            not self._autocomplete_enabled
+            self._language != "python"
+            or not self._autocomplete_enabled
             or self.isReadOnly()
             or not items
             or cursor.blockNumber() != self._completion_request_block
