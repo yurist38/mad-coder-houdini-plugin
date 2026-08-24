@@ -208,3 +208,4 @@ class TypeCheckService(QtCore.QObject):
                 process.kill()
                 process.waitForFinished(250)
             self._dispose_request(process)
+        self._process = None

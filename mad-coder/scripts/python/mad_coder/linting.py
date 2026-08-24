@@ -134,8 +134,8 @@ class RuffService(QtCore.QObject):
             return
 
         if self._format_process is not None:
-            self._format_process.kill()
-            self._format_process.deleteLater()
+            self._dispose_process(self._format_process)
+            self._format_process = None
 
         process = QtCore.QProcess(self)
         self._format_process = process
@@ -245,10 +245,18 @@ class RuffService(QtCore.QObject):
             self.format_failed.emit(message)
         process.deleteLater()
 
+    @staticmethod
+    def _dispose_process(process: QtCore.QProcess) -> None:
+        if process.state() != QtCore.QProcess.ProcessState.NotRunning:
+            process.kill()
+            process.waitForFinished(250)
+        process.deleteLater()
+
     def shutdown(self) -> None:
         self._lint_generation += 1
         self._lint_pending = None
         for process in (self._lint_process, self._format_process):
-            if process is not None and process.state() != QtCore.QProcess.ProcessState.NotRunning:
-                process.kill()
-                process.waitForFinished(250)
+            if process is not None:
+                self._dispose_process(process)
+        self._lint_process = None
+        self._format_process = None

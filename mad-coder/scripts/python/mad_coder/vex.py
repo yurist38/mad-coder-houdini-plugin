@@ -23,7 +23,8 @@ _ATTRIBUTE = re.compile(
     r"@(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
 )
 _VCC_DIAGNOSTIC = re.compile(
-    r"^(?P<path>.+?):(?:(?P<line>\d+):(?P<column>\d+)"
+    r"^(?P<path>.+?)(?=:(?:\d+:\d+(?:-\d+)?:)?\s*(?:Error|Warning|Info)\b):"
+    r"(?:(?P<line>\d+):(?P<column>\d+)"
     r"(?:-(?P<end_column>\d+))?:)?\s*"
     r"(?P<severity>Error|Warning|Info)\s*(?P<number>\d+)?:\s*(?P<message>.*)$"
 )

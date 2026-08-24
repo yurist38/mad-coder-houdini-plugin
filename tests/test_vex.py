@@ -62,6 +62,15 @@ class ParseVccOutputTests(unittest.TestCase):
         self.assertEqual(diagnostic.end_column, 9)
         self.assertEqual(diagnostic.severity, "warning")
 
+    def test_parses_windows_drive_letter_path(self) -> None:
+        payload = r"C:\Users\artist\check.vfl:2:4: Error 1088: Syntax error."
+
+        diagnostic = parse_vcc_output(payload)[0]
+
+        self.assertEqual(diagnostic.line, 2)
+        self.assertEqual(diagnostic.column, 4)
+        self.assertEqual(diagnostic.code, "VEX1088")
+
     def test_appends_continuation_lines_to_previous_message(self) -> None:
         payload = "/tmp/check.vfl:2:4: Error 1000: Candidates are:\nfloat foo(float)"
 
