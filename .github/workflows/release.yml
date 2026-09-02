@@ -65,6 +65,7 @@ jobs:
       - name: Install bundled runtime dependencies
         run: python -m pip install -r requirements-runtime.txt ruff==0.16.0 ty==0.0.72
       - name: Build release archive
+        shell: bash
         run: python scripts/build_release.py --version "${RELEASE_TAG}" --platform "${{ matrix.platform }}"
       - uses: actions/upload-artifact@v4
         with:
