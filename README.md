@@ -29,6 +29,14 @@ Houdini's internal editor widgets.
 - View-only handling for locked parameters and non-writable asset libraries
 - Syntax-error diagnostics when Ruff is unavailable
 
+## Other Houdini plugins
+
+- [MadGPT - AI-assistant plugin for Houdini](https://github.com/yurist38/madgpt-houdini-plugin)
+
+## Support project
+
+[![BuyMeACoffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%23ffdd00.svg?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](buymeacoffee.com/roomjs)
+
 ## Compatibility
 
 It targets **Houdini 21.0 and newer**, using Qt 6/PySide6:
